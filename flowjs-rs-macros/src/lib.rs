@@ -108,9 +108,38 @@ impl DerivedFlow {
         }
         let (impl_generics, ty_generics, where_clause) = bounds.split_for_impl();
 
+        // WithoutGenerics: if no generics, Self; otherwise replace all type params with Dummy
+        let without_generics = if generics.params.is_empty() {
+            quote!(Self)
+        } else {
+            let dummies = generics.params.iter().map(|_| {
+                quote!(#crate_rename::Dummy)
+            });
+            quote!(#rust_ty<#(#dummies),*>)
+        };
+
+        // decl_concrete: concrete declaration using actual generic args (not placeholders)
+        let decl_concrete_fn = if self.is_opaque {
+            // opaque types use the same decl for concrete
+            quote! {
+                fn decl_concrete(cfg: &#crate_rename::Config) -> String {
+                    Self::decl(cfg)
+                }
+            }
+        } else {
+            quote! {
+                fn decl_concrete(cfg: &#crate_rename::Config) -> String {
+                    format!("type {} = {};", Self::name(cfg), Self::inline(cfg))
+                }
+            }
+        };
+
         quote! {
             #[automatically_derived]
             impl #impl_generics #crate_rename::Flow for #rust_ty #ty_generics #where_clause {
+                type WithoutGenerics = #without_generics;
+                type OptionInnerType = Self;
+
                 fn name(cfg: &#crate_rename::Config) -> String {
                     #flow_name.to_owned()
                 }
@@ -120,6 +149,7 @@ impl DerivedFlow {
                 }
 
                 #decl_fn
+                #decl_concrete_fn
                 #docs_fn
                 #output_path_fn
 
