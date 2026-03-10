@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "flowjs-rs",
+    "flowjs-rs-macros",
+]
+resolver = "2"
