@@ -155,7 +155,7 @@ fn opaque_type_fully() {
 
     // Assert
     assert_eq!(
-        decl, "opaque type OpaqueToken;",
+        decl, "declare export opaque type OpaqueToken;",
         "should be fully opaque"
     );
 }
@@ -168,7 +168,7 @@ fn opaque_type_bounded() {
 
     // Assert
     assert_eq!(
-        decl, "opaque type BoundedOpaque: string;",
+        decl, "declare export opaque type BoundedOpaque: string;",
         "should be bounded opaque"
     );
 }

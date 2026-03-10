@@ -53,7 +53,12 @@ fn validate_flow(flow_source: &str) -> Result<(), String> {
 
 /// Wrap a type declaration in `// @flow` + `export` like the real export logic.
 fn as_flow_file(decl: &str) -> String {
-    format!("// @flow\nexport {decl}\n")
+    // Opaque types already include `declare export`
+    if decl.starts_with("declare export") {
+        format!("// @flow\n{decl}\n")
+    } else {
+        format!("// @flow\nexport {decl}\n")
+    }
 }
 
 // ── Test types ──────────────────────────────────────────────────────────
@@ -95,6 +100,14 @@ struct CamelCase {
     first_name: String,
     last_name: String,
 }
+
+#[derive(Flow)]
+#[flow(opaque)]
+struct OpaqueToken(String);
+
+#[derive(Flow)]
+#[flow(opaque = "string")]
+struct BoundedOpaque(String);
 
 #[derive(Flow)]
 #[flow(untagged)]
@@ -184,6 +197,26 @@ fn validate_camel_case_rename() {
 }
 
 #[test]
+fn validate_opaque_type() {
+    // Arrange
+    let cfg = Config::new();
+    let source = as_flow_file(&OpaqueToken::decl(&cfg));
+
+    // Act and Assert
+    validate_flow(&source).expect("OpaqueToken should produce valid Flow");
+}
+
+#[test]
+fn validate_bounded_opaque_type() {
+    // Arrange
+    let cfg = Config::new();
+    let source = as_flow_file(&BoundedOpaque::decl(&cfg));
+
+    // Act and Assert
+    validate_flow(&source).expect("BoundedOpaque should produce valid Flow");
+}
+
+#[test]
 fn validate_untagged_enum() {
     // Arrange
     let cfg = Config::new();
@@ -217,6 +250,8 @@ fn validate_all_types_batch() {
         ("Newtype", Newtype::decl(&cfg)),
         ("UnitStruct", UnitStruct::decl(&cfg)),
         ("CamelCase", CamelCase::decl(&cfg)),
+        ("OpaqueToken", OpaqueToken::decl(&cfg)),
+        ("BoundedOpaque", BoundedOpaque::decl(&cfg)),
         ("UntaggedUnion", UntaggedUnion::decl(&cfg)),
         ("TaggedUnion", TaggedUnion::decl(&cfg)),
     ];

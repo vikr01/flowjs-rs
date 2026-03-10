@@ -73,8 +73,8 @@ impl DerivedFlow {
         let decl_fn = if self.is_opaque {
             let bound = self
                 .opaque_bound
-                .map(|b| quote! { format!("opaque type {}: {};", #flow_name, #b) })
-                .unwrap_or_else(|| quote! { format!("opaque type {};", #flow_name) });
+                .map(|b| quote! { format!("declare export opaque type {}: {};", #flow_name, #b) })
+                .unwrap_or_else(|| quote! { format!("declare export opaque type {};", #flow_name) });
             quote! {
                 fn decl(cfg: &#crate_rename::Config) -> String {
                     #bound

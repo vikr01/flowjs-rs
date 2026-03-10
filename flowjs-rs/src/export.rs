@@ -110,7 +110,12 @@ pub fn export_to_string<T: Flow + ?Sized + 'static>(cfg: &Config) -> Result<Stri
     }
 
     let decl = T::decl(cfg);
-    content.push_str(&format!("export {decl}\n"));
+    // Opaque types already include `declare export` in their decl
+    if decl.starts_with("declare export") {
+        content.push_str(&format!("{decl}\n"));
+    } else {
+        content.push_str(&format!("export {decl}\n"));
+    }
 
     Ok(content)
 }
