@@ -88,6 +88,21 @@ impl ContainerAttr {
                         } else {
                             this.opaque = Some(None);
                         }
+                    } else if meta.path.is_ident("bound") {
+                        let value: Lit = meta.value()?.parse()?;
+                        if let Lit::Str(s) = value {
+                            let where_clause: syn::WhereClause =
+                                syn::parse_str(&format!("where {}", s.value()))?;
+                            this.bound =
+                                Some(where_clause.predicates.into_iter().collect());
+                        }
+                    } else {
+                        let path = meta.path.get_ident()
+                            .map(|i| i.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        return Err(meta.error(format!(
+                            "unknown #[flow(...)] attribute: `{path}`"
+                        )));
                     }
                     Ok(())
                 })?;
@@ -155,6 +170,15 @@ impl ContainerAttr {
             None => raw.to_owned(),
         }
     }
+
+    /// Apply `rename_all_fields` inflection to a field inside an enum variant.
+    /// Falls back to `rename_all` if `rename_all_fields` is not set.
+    pub fn rename_variant_field(&self, raw: &str) -> String {
+        match &self.rename_all_fields {
+            Some(inflection) => inflection.apply(raw),
+            None => self.rename_field(raw),
+        }
+    }
 }
 
 /// Field-level attributes (`#[flow(...)]` on struct fields).
@@ -165,6 +189,10 @@ pub struct FieldAttr {
     pub optional: bool,
     pub inline: bool,
     pub flatten: bool,
+    /// serde: `skip_serializing_if` or `skip_serializing` seen
+    pub maybe_omitted: bool,
+    /// serde: `default` seen
+    pub has_default: bool,
 }
 
 impl FieldAttr {
@@ -176,6 +204,8 @@ impl FieldAttr {
             optional: false,
             inline: false,
             flatten: false,
+            maybe_omitted: false,
+            has_default: false,
         };
 
         for attr in attrs {
@@ -199,6 +229,13 @@ impl FieldAttr {
                         this.inline = true;
                     } else if meta.path.is_ident("flatten") {
                         this.flatten = true;
+                    } else {
+                        let path = meta.path.get_ident()
+                            .map(|i| i.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        return Err(meta.error(format!(
+                            "unknown #[flow(...)] field attribute: `{path}`"
+                        )));
                     }
                     Ok(())
                 })?;
@@ -218,6 +255,14 @@ impl FieldAttr {
                         if !this.skip {
                             this.skip = true;
                         }
+                    } else if meta.path.is_ident("skip_serializing") {
+                        this.maybe_omitted = true;
+                    } else if meta.path.is_ident("skip_serializing_if") {
+                        let _ = meta.value().ok(); // consume the function name
+                        this.maybe_omitted = true;
+                    } else if meta.path.is_ident("default") {
+                        let _ = meta.value().ok(); // consume optional default fn
+                        this.has_default = true;
                     } else if meta.path.is_ident("flatten") {
                         if !this.flatten {
                             this.flatten = true;
@@ -231,6 +276,12 @@ impl FieldAttr {
         }
 
         Ok(this)
+    }
+
+    /// Whether this field should be optional based on serde attributes.
+    /// A field is optional if it has both `skip_serializing_if`/`skip_serializing` AND `default`.
+    pub fn is_serde_optional(&self) -> bool {
+        self.maybe_omitted && self.has_default
     }
 }
 
@@ -257,6 +308,13 @@ impl VariantAttr {
                         }
                     } else if meta.path.is_ident("skip") {
                         this.skip = true;
+                    } else {
+                        let path = meta.path.get_ident()
+                            .map(|i| i.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        return Err(meta.error(format!(
+                            "unknown #[flow(...)] variant attribute: `{path}`"
+                        )));
                     }
                     Ok(())
                 })?;
@@ -312,7 +370,7 @@ impl Inflection {
             "SCREAMING_SNAKE_CASE" => Self::ScreamingSnake,
             "kebab-case" => Self::Kebab,
             "SCREAMING-KEBAB-CASE" => Self::ScreamingKebab,
-            _ => Self::Snake, // Default fallback
+            other => panic!("unknown rename_all inflection: \"{other}\". Expected one of: lowercase, UPPERCASE, camelCase, snake_case, PascalCase, SCREAMING_SNAKE_CASE, kebab-case, SCREAMING-KEBAB-CASE"),
         }
     }
 

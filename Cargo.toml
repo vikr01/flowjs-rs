@@ -1,6 +1,13 @@
 [workspace]
 members = [
-    "flowjs-rs",
-    "flowjs-rs-macros",
+    "crates/flow-parser",
+    "crates/flowjs-rs",
+    "crates/flowjs-rs-macros",
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.78.0"
+license = "MIT"
+repository = "https://github.com/unstabler/flowjs-rs"

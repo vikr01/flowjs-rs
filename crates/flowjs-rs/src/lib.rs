@@ -20,6 +20,7 @@
 //! ```
 
 mod export;
+pub mod flow_type;
 mod impls;
 
 pub use flowjs_rs_macros::Flow;
@@ -266,9 +267,9 @@ impl Flow for Dummy {
     type OptionInnerType = Self;
 
     fn name(_: &Config) -> String {
-        "any".to_owned()
+        flow_type::ANY.to_owned()
     }
     fn inline(_: &Config) -> String {
-        "any".to_owned()
+        flow_type::ANY.to_owned()
     }
 }

@@ -1,6 +1,6 @@
 //! Built-in Flow trait implementations for Rust standard types.
 
-use crate::{Config, Dummy, Flow, TypeVisitor};
+use crate::{flow_type, Config, Dummy, Flow, TypeVisitor};
 
 // Wrapper types: delegate all methods to the inner type T
 macro_rules! impl_wrapper {
@@ -75,23 +75,23 @@ macro_rules! impl_flow_primitive {
 }
 
 // Primitives
-impl_flow_primitive!(bool, "boolean");
-impl_flow_primitive!(i8, "number");
-impl_flow_primitive!(i16, "number");
-impl_flow_primitive!(i32, "number");
-impl_flow_primitive!(u8, "number");
-impl_flow_primitive!(u16, "number");
-impl_flow_primitive!(u32, "number");
-impl_flow_primitive!(i64, "number");
-impl_flow_primitive!(u64, "number");
-impl_flow_primitive!(i128, "number");
-impl_flow_primitive!(u128, "number");
-impl_flow_primitive!(f32, "number");
-impl_flow_primitive!(f64, "number");
-impl_flow_primitive!(char, "string");
-impl_flow_primitive!(String, "string");
-impl_flow_primitive!(str, "string");
-impl_flow_primitive!((), "void");
+impl_flow_primitive!(bool, flow_type::BOOLEAN);
+impl_flow_primitive!(i8, flow_type::NUMBER);
+impl_flow_primitive!(i16, flow_type::NUMBER);
+impl_flow_primitive!(i32, flow_type::NUMBER);
+impl_flow_primitive!(u8, flow_type::NUMBER);
+impl_flow_primitive!(u16, flow_type::NUMBER);
+impl_flow_primitive!(u32, flow_type::NUMBER);
+impl_flow_primitive!(i64, flow_type::NUMBER);
+impl_flow_primitive!(u64, flow_type::NUMBER);
+impl_flow_primitive!(i128, flow_type::NUMBER);
+impl_flow_primitive!(u128, flow_type::NUMBER);
+impl_flow_primitive!(f32, flow_type::NUMBER);
+impl_flow_primitive!(f64, flow_type::NUMBER);
+impl_flow_primitive!(char, flow_type::STRING);
+impl_flow_primitive!(String, flow_type::STRING);
+impl_flow_primitive!(str, flow_type::STRING);
+impl_flow_primitive!((), flow_type::VOID);
 
 // Option<T> → ?T
 impl<T: Flow> Flow for Option<T> {
@@ -126,13 +126,13 @@ impl<T: Flow> Flow for Vec<T> {
     type OptionInnerType = Self;
 
     fn ident(_: &Config) -> String {
-        "$ReadOnlyArray".to_owned()
+        flow_type::READ_ONLY_ARRAY.to_owned()
     }
     fn name(cfg: &Config) -> String {
-        format!("$ReadOnlyArray<{}>", T::name(cfg))
+        format!("{}<{}>", flow_type::READ_ONLY_ARRAY, T::name(cfg))
     }
     fn inline(cfg: &Config) -> String {
-        format!("$ReadOnlyArray<{}>", T::inline(cfg))
+        format!("{}<{}>", flow_type::READ_ONLY_ARRAY, T::inline(cfg))
     }
     fn visit_dependencies(v: &mut impl TypeVisitor)
     where
@@ -202,6 +202,12 @@ impl_shadow!(as Vec<T>: impl<T: Flow> Flow for std::collections::HashSet<T>);
 // BTreeSet → $ReadOnlyArray
 impl_shadow!(as Vec<T>: impl<T: Flow> Flow for std::collections::BTreeSet<T>);
 
+// VecDeque → $ReadOnlyArray
+impl_shadow!(as Vec<T>: impl<T: Flow> Flow for std::collections::VecDeque<T>);
+
+// LinkedList → $ReadOnlyArray
+impl_shadow!(as Vec<T>: impl<T: Flow> Flow for std::collections::LinkedList<T>);
+
 // Tuples
 macro_rules! impl_flow_tuples {
     ( impl $($i:ident),* ) => {
@@ -212,11 +218,12 @@ macro_rules! impl_flow_tuples {
                 let parts: Vec<String> = vec![$($i::name(cfg)),*];
                 format!("[{}]", parts.join(", "))
             }
-            fn inline(_: &Config) -> String {
-                panic!("tuple cannot be inlined!");
+            fn inline(cfg: &Config) -> String {
+                let parts: Vec<String> = vec![$($i::inline(cfg)),*];
+                format!("[{}]", parts.join(", "))
             }
-            fn inline_flattened(_: &Config) -> String {
-                panic!("tuple cannot be flattened")
+            fn inline_flattened(cfg: &Config) -> String {
+                format!("({})", Self::inline(cfg))
             }
             fn decl(_: &Config) -> String {
                 panic!("tuple cannot be declared")
@@ -242,7 +249,7 @@ macro_rules! impl_flow_tuples {
     () => {};
 }
 
-impl_flow_tuples!(A, B, C, D, E, F, G, H, I, J, K, L);
+impl_flow_tuples!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
 // serde_json::Value → mixed
 #[cfg(feature = "serde-json-impl")]
@@ -250,10 +257,10 @@ impl Flow for serde_json::Value {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
     fn name(_: &Config) -> String {
-        "mixed".to_owned()
+        flow_type::MIXED.to_owned()
     }
     fn inline(_: &Config) -> String {
-        "mixed".to_owned()
+        flow_type::MIXED.to_owned()
     }
 }
 
@@ -262,10 +269,10 @@ impl Flow for std::path::PathBuf {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
     fn name(_: &Config) -> String {
-        "string".to_owned()
+        flow_type::STRING.to_owned()
     }
     fn inline(_: &Config) -> String {
-        "string".to_owned()
+        flow_type::STRING.to_owned()
     }
 }
 
@@ -273,10 +280,10 @@ impl Flow for std::path::Path {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
     fn name(_: &Config) -> String {
-        "string".to_owned()
+        flow_type::STRING.to_owned()
     }
     fn inline(_: &Config) -> String {
-        "string".to_owned()
+        flow_type::STRING.to_owned()
     }
 }
 
@@ -375,3 +382,126 @@ impl_wrapper!(impl<T: Flow> Flow for std::cell::Cell<T>);
 
 // RefCell<T> → T
 impl_wrapper!(impl<T: Flow> Flow for std::cell::RefCell<T>);
+
+// Mutex<T> → T
+impl_wrapper!(impl<T: Flow> Flow for std::sync::Mutex<T>);
+
+// RwLock<T> → T
+impl_wrapper!(impl<T: Flow> Flow for std::sync::RwLock<T>);
+
+// usize / isize
+impl_flow_primitive!(usize, flow_type::NUMBER);
+impl_flow_primitive!(isize, flow_type::NUMBER);
+
+// NonZero* types → number
+impl_shadow!(as u8: impl Flow for std::num::NonZeroU8);
+impl_shadow!(as u16: impl Flow for std::num::NonZeroU16);
+impl_shadow!(as u32: impl Flow for std::num::NonZeroU32);
+impl_shadow!(as u64: impl Flow for std::num::NonZeroU64);
+impl_shadow!(as u128: impl Flow for std::num::NonZeroU128);
+impl_shadow!(as usize: impl Flow for std::num::NonZeroUsize);
+impl_shadow!(as i8: impl Flow for std::num::NonZeroI8);
+impl_shadow!(as i16: impl Flow for std::num::NonZeroI16);
+impl_shadow!(as i32: impl Flow for std::num::NonZeroI32);
+impl_shadow!(as i64: impl Flow for std::num::NonZeroI64);
+impl_shadow!(as i128: impl Flow for std::num::NonZeroI128);
+impl_shadow!(as isize: impl Flow for std::num::NonZeroIsize);
+
+// PhantomData<T> → void
+impl<T: ?Sized> Flow for std::marker::PhantomData<T> {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+    fn name(_: &Config) -> String {
+        flow_type::VOID.to_owned()
+    }
+    fn inline(_: &Config) -> String {
+        flow_type::VOID.to_owned()
+    }
+}
+
+// Range<T> → { +start: T, +end: T }
+impl<T: Flow> Flow for std::ops::Range<T> {
+    type WithoutGenerics = std::ops::Range<Dummy>;
+    type OptionInnerType = Self;
+
+    fn ident(_: &Config) -> String {
+        panic!()
+    }
+    fn name(cfg: &Config) -> String {
+        format!("{{ +start: {}, +end: {} }}", T::name(cfg), T::name(cfg))
+    }
+    fn inline(cfg: &Config) -> String {
+        format!("{{ +start: {}, +end: {} }}", T::inline(cfg), T::inline(cfg))
+    }
+    fn inline_flattened(cfg: &Config) -> String {
+        format!("({})", Self::inline(cfg))
+    }
+    fn visit_dependencies(v: &mut impl TypeVisitor)
+    where
+        Self: 'static,
+    {
+        T::visit_dependencies(v);
+    }
+    fn visit_generics(v: &mut impl TypeVisitor)
+    where
+        Self: 'static,
+    {
+        T::visit_generics(v);
+        v.visit::<T>();
+    }
+}
+
+// RangeInclusive<T> → { +start: T, +end: T }
+impl_shadow!(as std::ops::Range<T>: impl<T: Flow> Flow for std::ops::RangeInclusive<T>);
+
+// Duration → { +secs: number, +nanos: number }
+impl Flow for std::time::Duration {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+    fn name(_: &Config) -> String {
+        format!("{{| +secs: {}, +nanos: {} |}}", flow_type::NUMBER, flow_type::NUMBER)
+    }
+    fn inline(cfg: &Config) -> String {
+        Self::name(cfg)
+    }
+}
+
+// SystemTime → string (ISO 8601 serialization)
+impl_flow_primitive!(std::time::SystemTime, flow_type::STRING);
+
+// Network address types → string
+impl_flow_primitive!(std::net::IpAddr, flow_type::STRING);
+impl_flow_primitive!(std::net::Ipv4Addr, flow_type::STRING);
+impl_flow_primitive!(std::net::Ipv6Addr, flow_type::STRING);
+impl_flow_primitive!(std::net::SocketAddr, flow_type::STRING);
+impl_flow_primitive!(std::net::SocketAddrV4, flow_type::STRING);
+impl_flow_primitive!(std::net::SocketAddrV6, flow_type::STRING);
+
+// chrono types → string
+#[cfg(feature = "chrono-impl")]
+impl_flow_primitive!(chrono::NaiveDate, flow_type::STRING);
+#[cfg(feature = "chrono-impl")]
+impl_flow_primitive!(chrono::NaiveTime, flow_type::STRING);
+#[cfg(feature = "chrono-impl")]
+impl_flow_primitive!(chrono::NaiveDateTime, flow_type::STRING);
+#[cfg(feature = "chrono-impl")]
+impl<T: chrono::TimeZone> Flow for chrono::DateTime<T> {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+    fn name(_: &Config) -> String {
+        flow_type::STRING.to_owned()
+    }
+    fn inline(_: &Config) -> String {
+        flow_type::STRING.to_owned()
+    }
+}
+#[cfg(feature = "chrono-impl")]
+impl_flow_primitive!(chrono::Duration, flow_type::STRING);
+
+// uuid::Uuid → string
+#[cfg(feature = "uuid-impl")]
+impl_flow_primitive!(uuid::Uuid, flow_type::STRING);
+
+// url::Url → string
+#[cfg(feature = "url-impl")]
+impl_flow_primitive!(url::Url, flow_type::STRING);
