@@ -3,18 +3,16 @@
 //! Uses the `flow-parser` crate (QuickJS + npm's flow-parser) to parse
 //! generated Flow source and assert on the typed Rust AST — no inline JS.
 
-use flow_parser::{
-    Declaration, FlowParser, ObjectMember, Statement, TypeAnnotation, VarianceKind,
-};
+use flow_parser::{Declaration, FlowParser, ObjectMember, Statement, TypeAnnotation, VarianceKind};
 use flowjs_rs::{Config, Flow};
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 /// Validate a declaration and extract the type alias name + right-hand side.
 fn parse_type_alias(parser: &FlowParser, decl: &str) -> (String, TypeAnnotation) {
-    let program = parser.validate_declaration(decl).unwrap_or_else(|e| {
-        panic!("Flow validation failed for:\n{decl}\n\nError: {e}")
-    });
+    let program = parser
+        .validate_declaration(decl)
+        .unwrap_or_else(|e| panic!("Flow validation failed for:\n{decl}\n\nError: {e}"));
 
     match &program.body[0] {
         Statement::ExportNamedDeclaration {
@@ -176,11 +174,18 @@ fn ast_simple_struct_fields() {
 
     match &props[0] {
         ObjectMember::ObjectTypeProperty {
-            key, value, variance, ..
+            key,
+            value,
+            variance,
+            ..
         } => {
             assert_eq!(key.name().unwrap(), "name", "first field name");
             assert_eq!(value.type_name(), "StringTypeAnnotation", "String → string");
-            assert_eq!(variance.as_ref().unwrap().kind, VarianceKind::Plus, "covariant (+)");
+            assert_eq!(
+                variance.as_ref().unwrap().kind,
+                VarianceKind::Plus,
+                "covariant (+)"
+            );
         }
         other => panic!("expected ObjectTypeProperty, got: {other:?}"),
     }
@@ -221,8 +226,15 @@ fn ast_option_produces_nullable() {
             ..
         } => {
             assert_eq!(key.name().unwrap(), "description", "field name");
-            assert!(*optional, "Option<T> should produce optional field");
-            assert_eq!(value.type_name(), "NullableTypeAnnotation", "Option<T> → ?T");
+            assert!(
+                !*optional,
+                "bare Option<T> without serde skip is always-present, not omittable"
+            );
+            assert_eq!(
+                value.type_name(),
+                "NullableTypeAnnotation",
+                "Option<T> → ?T"
+            );
 
             match value {
                 TypeAnnotation::NullableTypeAnnotation { type_annotation } => {
@@ -284,7 +296,11 @@ fn ast_newtype_inlines_to_string() {
 
     // Assert
     assert_eq!(name, "Newtype", "type name");
-    assert_eq!(ty.type_name(), "StringTypeAnnotation", "newtype(String) inlines to string");
+    assert_eq!(
+        ty.type_name(),
+        "StringTypeAnnotation",
+        "newtype(String) inlines to string"
+    );
 }
 
 #[test]
@@ -319,7 +335,11 @@ fn ast_camel_case_rename() {
             _ => None,
         })
         .collect();
-    assert_eq!(names, vec!["firstName", "lastName"], "fields should be camelCase");
+    assert_eq!(
+        names,
+        vec!["firstName", "lastName"],
+        "fields should be camelCase"
+    );
 }
 
 #[test]
@@ -329,7 +349,9 @@ fn ast_opaque_type() {
     let cfg = Config::new();
 
     // Act
-    let program = parser.validate_declaration(&OpaqueToken::decl(&cfg)).unwrap();
+    let program = parser
+        .validate_declaration(&OpaqueToken::decl(&cfg))
+        .unwrap();
 
     // Assert
     match &program.body[0] {
@@ -354,7 +376,9 @@ fn ast_bounded_opaque_type() {
     let cfg = Config::new();
 
     // Act
-    let program = parser.validate_declaration(&BoundedOpaque::decl(&cfg)).unwrap();
+    let program = parser
+        .validate_declaration(&BoundedOpaque::decl(&cfg))
+        .unwrap();
 
     // Assert
     match &program.body[0] {
@@ -417,7 +441,10 @@ fn ast_tagged_enum_has_tag_field() {
                 TypeAnnotation::StringLiteralTypeAnnotation { value } => {
                     assert_eq!(value, "Click", "tag value matches variant name");
                 }
-                other => panic!("expected StringLiteralTypeAnnotation, got: {}", other.type_name()),
+                other => panic!(
+                    "expected StringLiteralTypeAnnotation, got: {}",
+                    other.type_name()
+                ),
             }
         }
         other => panic!("expected ObjectTypeProperty, got: {other:?}"),
@@ -439,7 +466,11 @@ fn ast_adjacently_tagged_has_content_field() {
 
     // Assert — Text variant has +type: 'Text' and +data: {| ... |}
     let props = object_properties(&union_types[0]);
-    assert!(props.len() >= 2, "should have tag + content fields, got {}", props.len());
+    assert!(
+        props.len() >= 2,
+        "should have tag + content fields, got {}",
+        props.len()
+    );
 
     match &props[0] {
         ObjectMember::ObjectTypeProperty { key, value, .. } => {
@@ -448,7 +479,10 @@ fn ast_adjacently_tagged_has_content_field() {
                 TypeAnnotation::StringLiteralTypeAnnotation { value } => {
                     assert_eq!(value, "Text", "tag value");
                 }
-                other => panic!("expected StringLiteralTypeAnnotation, got: {}", other.type_name()),
+                other => panic!(
+                    "expected StringLiteralTypeAnnotation, got: {}",
+                    other.type_name()
+                ),
             }
         }
         other => panic!("expected ObjectTypeProperty for tag, got: {other:?}"),
@@ -457,7 +491,11 @@ fn ast_adjacently_tagged_has_content_field() {
     match &props[1] {
         ObjectMember::ObjectTypeProperty { key, value, .. } => {
             assert_eq!(key.name().unwrap(), "data", "content field name");
-            assert_eq!(value.type_name(), "ObjectTypeAnnotation", "content is an object");
+            assert_eq!(
+                value.type_name(),
+                "ObjectTypeAnnotation",
+                "content is an object"
+            );
         }
         other => panic!("expected ObjectTypeProperty for content, got: {other:?}"),
     }
@@ -477,9 +515,7 @@ fn ast_kebab_case_fields_quoted() {
     let fields: Vec<(&str, bool)> = props
         .iter()
         .filter_map(|p| match p {
-            ObjectMember::ObjectTypeProperty { key, .. } => {
-                Some((key.name()?, key.is_quoted()))
-            }
+            ObjectMember::ObjectTypeProperty { key, .. } => Some((key.name()?, key.is_quoted())),
             _ => None,
         })
         .collect();
@@ -506,7 +542,10 @@ fn ast_optional_variant_fields() {
             ));
             match desc {
                 Some(ObjectMember::ObjectTypeProperty { optional, .. }) => {
-                    assert!(*optional, "Option<String> in variant should be optional");
+                    assert!(
+                        !*optional,
+                        "bare Option<String> in variant without serde skip is always-present"
+                    );
                 }
                 _ => panic!("description field not found"),
             }
@@ -524,7 +563,10 @@ fn ast_optional_variant_fields() {
 
     match desc {
         ObjectMember::ObjectTypeProperty { optional, .. } => {
-            assert!(*optional, "Option<String> in variant should be optional");
+            assert!(
+                !*optional,
+                "bare Option<String> in variant without serde skip is always-present"
+            );
         }
         _ => unreachable!(),
     }
@@ -547,8 +589,16 @@ fn ast_tuple_in_struct() {
             match value {
                 TypeAnnotation::TupleTypeAnnotation { element_types } => {
                     assert_eq!(element_types.len(), 2, "tuple has 2 elements");
-                    assert_eq!(element_types[0].type_name(), "StringTypeAnnotation", "first element is string");
-                    assert_eq!(element_types[1].type_name(), "NumberTypeAnnotation", "second element is number");
+                    assert_eq!(
+                        element_types[0].type_name(),
+                        "StringTypeAnnotation",
+                        "first element is string"
+                    );
+                    assert_eq!(
+                        element_types[1].type_name(),
+                        "NumberTypeAnnotation",
+                        "second element is number"
+                    );
                 }
                 other => panic!("expected TupleTypeAnnotation, got: {}", other.type_name()),
             }
@@ -709,7 +759,11 @@ fn flow_type_mixed_for_serde_json_value() {
     // Arrange, Act, and Assert
     assert_eq!(flowjs_rs::flow_type::MIXED, "mixed", "mixed constant");
     assert_eq!(flowjs_rs::flow_type::ANY, "any", "any constant");
-    assert_eq!(flowjs_rs::flow_type::EMPTY, "empty", "empty (bottom type) constant");
+    assert_eq!(
+        flowjs_rs::flow_type::EMPTY,
+        "empty",
+        "empty (bottom type) constant"
+    );
 }
 
 // ── Primitive type precision ────────────────────────────────────────────
@@ -748,8 +802,14 @@ fn validate_all_types_parse() {
         ("UntaggedUnion", UntaggedUnion::decl(&cfg)),
         ("TaggedUnion", TaggedUnion::decl(&cfg)),
         ("AdjacentlyTagged", AdjacentlyTagged::decl(&cfg)),
-        ("AdjacentlyTaggedNewtype", AdjacentlyTaggedNewtype::decl(&cfg)),
-        ("InternallyTaggedNewtype", InternallyTaggedNewtype::decl(&cfg)),
+        (
+            "AdjacentlyTaggedNewtype",
+            AdjacentlyTaggedNewtype::decl(&cfg),
+        ),
+        (
+            "InternallyTaggedNewtype",
+            InternallyTaggedNewtype::decl(&cfg),
+        ),
         ("ExternallyTagged", ExternallyTagged::decl(&cfg)),
         ("OptionalVariantFields", OptionalVariantFields::decl(&cfg)),
         ("RenamedVariantFields", RenamedVariantFields::decl(&cfg)),

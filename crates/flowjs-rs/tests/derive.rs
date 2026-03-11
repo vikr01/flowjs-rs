@@ -85,10 +85,7 @@ fn renamed_struct() {
         decl.contains("type RenamedUser"),
         "should use renamed type name"
     );
-    assert!(
-        decl.contains("+userId: number"),
-        "should use renamed field"
-    );
+    assert!(decl.contains("+userId: number"), "should use renamed field");
 }
 
 #[test]
@@ -116,8 +113,8 @@ fn option_becomes_nullable() {
 
     // Assert
     assert!(
-        decl.contains("+bio?: ?string"),
-        "Option<String> should become optional nullable"
+        decl.contains("+bio: ?string"),
+        "Option<String> without serde skip should be always-present nullable"
     );
 }
 

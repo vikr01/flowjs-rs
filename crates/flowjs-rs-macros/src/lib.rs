@@ -86,7 +86,9 @@ struct DerivedFlow {
 
 impl DerivedFlow {
     fn into_impl(self, rust_ty: Ident, generics: Generics) -> TokenStream {
-        let export_test = self.export.then(|| self.generate_export_test(&rust_ty, &generics));
+        let export_test = self
+            .export
+            .then(|| self.generate_export_test(&rust_ty, &generics));
 
         let output_path_fn = {
             let flow_name = &self.flow_name;
@@ -155,7 +157,9 @@ impl DerivedFlow {
             let bound = self
                 .opaque_bound
                 .map(|b| quote! { format!("declare export opaque type {}: {};", #flow_name, #b) })
-                .unwrap_or_else(|| quote! { format!("declare export opaque type {};", #flow_name) });
+                .unwrap_or_else(
+                    || quote! { format!("declare export opaque type {};", #flow_name) },
+                );
             quote! {
                 fn decl(cfg: &#crate_rename::Config) -> String {
                     #bound
@@ -165,48 +169,53 @@ impl DerivedFlow {
             let has_generics = generics.type_params().next().is_some();
             if has_generics {
                 // For generic types: create dummy types, get inline from WithoutGenerics
-                let generic_idents: Vec<_> = generics
-                    .type_params()
-                    .map(|tp| &tp.ident)
-                    .collect();
+                let generic_idents: Vec<_> = generics.type_params().map(|tp| &tp.ident).collect();
 
                 // Generate dummy type declarations for each generic param
-                let dummy_decls: Vec<_> = generic_idents.iter().map(|ident| {
-                    let dummy_name = format_ident!("{}Dummy", ident);
-                    quote! {
-                        struct #dummy_name;
-                        impl #crate_rename::Flow for #dummy_name {
-                            type WithoutGenerics = Self;
-                            type OptionInnerType = Self;
-                            fn name(_: &#crate_rename::Config) -> String {
-                                stringify!(#ident).to_owned()
-                            }
-                            fn inline(cfg: &#crate_rename::Config) -> String {
-                                Self::name(cfg)
+                let dummy_decls: Vec<_> = generic_idents
+                    .iter()
+                    .map(|ident| {
+                        let dummy_name = format_ident!("{}Dummy", ident);
+                        quote! {
+                            struct #dummy_name;
+                            impl #crate_rename::Flow for #dummy_name {
+                                type WithoutGenerics = Self;
+                                type OptionInnerType = Self;
+                                fn name(_: &#crate_rename::Config) -> String {
+                                    stringify!(#ident).to_owned()
+                                }
+                                fn inline(cfg: &#crate_rename::Config) -> String {
+                                    Self::name(cfg)
+                                }
                             }
                         }
-                    }
-                }).collect();
+                    })
+                    .collect();
 
-                let generics_str: Vec<_> = generic_idents.iter().map(|ident| {
-                    quote!(stringify!(#ident))
-                }).collect();
+                let generics_str: Vec<_> = generic_idents
+                    .iter()
+                    .map(|ident| quote!(stringify!(#ident)))
+                    .collect();
 
                 // Build full generic args for instantiation (named dummies for type params)
-                let full_generic_args: Vec<_> = generics.params.iter().map(|p| match p {
-                    GenericParam::Type(tp) => {
-                        let dummy_name = format_ident!("{}Dummy", tp.ident);
-                        quote!(#dummy_name)
-                    }
-                    GenericParam::Lifetime(lt) => {
-                        let lt = &lt.lifetime;
-                        quote!(#lt)
-                    }
-                    GenericParam::Const(c) => {
-                        let ident = &c.ident;
-                        quote!(#ident)
-                    }
-                }).collect();
+                let full_generic_args: Vec<_> = generics
+                    .params
+                    .iter()
+                    .map(|p| match p {
+                        GenericParam::Type(tp) => {
+                            let dummy_name = format_ident!("{}Dummy", tp.ident);
+                            quote!(#dummy_name)
+                        }
+                        GenericParam::Lifetime(lt) => {
+                            let lt = &lt.lifetime;
+                            quote!(#lt)
+                        }
+                        GenericParam::Const(c) => {
+                            let ident = &c.ident;
+                            quote!(#ident)
+                        }
+                    })
+                    .collect();
 
                 quote! {
                     fn decl(cfg: &#crate_rename::Config) -> String {
@@ -371,6 +380,7 @@ impl DerivedFlow {
         quote! {
             #[cfg(test)]
             #[test]
+            #[allow(non_snake_case)]
             fn #test_name() {
                 let cfg = #crate_rename::Config::from_env();
                 <#ty as #crate_rename::Flow>::export_all(&cfg)
@@ -519,38 +529,43 @@ fn derive_struct(
                     if field_attr.type_override.is_none() {
                         deps.append_from(ty);
                     }
-                    flattened_fields.push(
-                        quote!(<#ty as #crate_rename::Flow>::inline_flattened(cfg)),
-                    );
+                    flattened_fields
+                        .push(quote!(<#ty as #crate_rename::Flow>::inline_flattened(cfg)));
                     continue;
                 }
 
-                let name = utils::quote_property_name(
-                    &field_attr.rename.clone().unwrap_or_else(|| {
+                let name =
+                    utils::quote_property_name(&field_attr.rename.clone().unwrap_or_else(|| {
                         let raw = field_name.to_string();
                         container.rename_field(&raw)
-                    }),
-                );
+                    }));
+
+                // Resolve the effective type: `as` overrides the Rust type,
+                // `type` overrides with a literal string.
+                let effective_ty = field_attr.type_as.as_ref().unwrap_or(ty);
 
                 // Track dependencies
                 if field_attr.type_override.is_none() {
                     if field_attr.inline {
-                        deps.append_from(ty);
+                        deps.append_from(effective_ty);
                     } else {
-                        deps.push(ty);
+                        deps.push(effective_ty);
                     }
                 }
 
                 let type_str = if let Some(override_ty) = &field_attr.type_override {
                     quote!(#override_ty.to_owned())
                 } else if field_attr.inline {
-                    quote!(<#ty as #crate_rename::Flow>::inline(cfg))
+                    quote!(<#effective_ty as #crate_rename::Flow>::inline(cfg))
                 } else {
-                    quote!(<#ty as #crate_rename::Flow>::name(cfg))
+                    quote!(<#effective_ty as #crate_rename::Flow>::name(cfg))
                 };
 
-                let is_optional = field_attr.optional || field_attr.is_serde_optional() || is_option_type(ty);
-                let opt_marker = if is_optional { "?" } else { "" };
+                // Key-optional (`field?:`) only when explicitly marked or serde says omittable.
+                // `Option<T>` without skip_serializing_if is always-present-but-nullable (`+field: ?T`),
+                // NOT omittable (`+field?: ?T`). The `?T` nullability comes from Flow::name() for Option.
+                let is_omittable = field_attr.optional || field_attr.is_serde_optional();
+                let opt_marker = if is_omittable { "?" } else { "" };
 
                 formatted_fields.push(quote! {
                     format!("  +{}{}: {},", #name, #opt_marker, #type_str)
@@ -753,18 +768,16 @@ fn derive_enum(
                         if field_attr.type_override.is_none() {
                             deps.append_from(ty);
                         }
-                        flattened_defs.push(
-                            quote!(<#ty as #crate_rename::Flow>::inline_flattened(cfg)),
-                        );
+                        flattened_defs
+                            .push(quote!(<#ty as #crate_rename::Flow>::inline_flattened(cfg)));
                         continue;
                     }
 
                     let field_name = f.ident.as_ref().unwrap();
-                    let name = utils::quote_property_name(
-                        &field_attr.rename.clone().unwrap_or_else(|| {
-                            container.rename_variant_field(&field_name.to_string())
-                        }),
-                    );
+                    let name =
+                        utils::quote_property_name(&field_attr.rename.clone().unwrap_or_else(
+                            || container.rename_variant_field(&field_name.to_string()),
+                        ));
                     if field_attr.type_override.is_none() {
                         if field_attr.inline {
                             deps.append_from(ty);
@@ -779,8 +792,8 @@ fn derive_enum(
                     } else {
                         quote!(<#ty as #crate_rename::Flow>::name(cfg))
                     };
-                    let is_optional = field_attr.optional || field_attr.is_serde_optional() || is_option_type(ty);
-                    let opt_marker = if is_optional { "?" } else { "" };
+                    let is_omittable = field_attr.optional || field_attr.is_serde_optional();
+                    let opt_marker = if is_omittable { "?" } else { "" };
                     field_defs.push(quote!(format!("+{}{}: {}", #name, #opt_marker, #type_str)));
                 }
 
@@ -855,13 +868,4 @@ fn derive_enum(
         let variants: Vec<String> = vec![#(#variant_defs),*];
         variants.join(" | ")
     }})
-}
-
-fn is_option_type(ty: &Type) -> bool {
-    if let Type::Path(path) = ty {
-        if let Some(seg) = path.path.segments.last() {
-            return seg.ident == "Option";
-        }
-    }
-    false
 }

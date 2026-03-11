@@ -18,15 +18,17 @@ fn install_deps(crate_dir: &Path) {
             panic!("failed to run `bun install`: {e}");
         });
 
-    assert!(status.success(), "`bun install` failed with status {status}");
+    assert!(
+        status.success(),
+        "`bun install` failed with status {status}"
+    );
 }
 
 fn main() {
     println!("cargo::rerun-if-changed=package.json");
 
-    let crate_dir = PathBuf::from(
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
-    );
+    let crate_dir =
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"));
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR not set"));
     let dst = out_dir.join(OUT_FILENAME);
 
@@ -46,10 +48,6 @@ fn main() {
     );
 
     std::fs::copy(&src, &dst).unwrap_or_else(|e| {
-        panic!(
-            "failed to copy {} → {}: {e}",
-            src.display(),
-            dst.display()
-        );
+        panic!("failed to copy {} → {}: {e}", src.display(), dst.display());
     });
 }

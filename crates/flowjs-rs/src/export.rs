@@ -17,10 +17,7 @@ pub enum ExportError {
 }
 
 /// Write a Flow type declaration to a file.
-pub fn export_to<T: Flow + 'static + ?Sized>(
-    cfg: &Config,
-    path: &Path,
-) -> Result<(), ExportError> {
+pub fn export_to<T: Flow + 'static + ?Sized>(cfg: &Config, path: &Path) -> Result<(), ExportError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

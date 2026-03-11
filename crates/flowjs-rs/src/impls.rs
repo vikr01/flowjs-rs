@@ -251,16 +251,25 @@ macro_rules! impl_flow_tuples {
 
 impl_flow_tuples!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P);
 
-// serde_json::Value → mixed
+// serde_json::Value → mixed (declared as `type JsonValue = mixed` for import parity with ts-rs)
 #[cfg(feature = "serde-json-impl")]
 impl Flow for serde_json::Value {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
     fn name(_: &Config) -> String {
-        flow_type::MIXED.to_owned()
+        "JsonValue".to_owned()
     }
     fn inline(_: &Config) -> String {
         flow_type::MIXED.to_owned()
+    }
+    fn decl(_: &Config) -> String {
+        format!("type JsonValue = {};", flow_type::MIXED)
+    }
+    fn decl_concrete(_: &Config) -> String {
+        format!("type JsonValue = {};", flow_type::MIXED)
+    }
+    fn output_path() -> Option<std::path::PathBuf> {
+        Some(std::path::PathBuf::from("JsonValue.js.flow"))
     }
 }
 
@@ -338,10 +347,7 @@ impl<T: Flow, const N: usize> Flow for [T; N] {
         }
         format!(
             "[{}]",
-            (0..N)
-                .map(|_| T::name(cfg))
-                .collect::<Vec<_>>()
-                .join(", ")
+            (0..N).map(|_| T::name(cfg)).collect::<Vec<_>>().join(", ")
         )
     }
     fn inline(cfg: &Config) -> String {
@@ -459,7 +465,11 @@ impl Flow for std::time::Duration {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
     fn name(_: &Config) -> String {
-        format!("{{| +secs: {}, +nanos: {} |}}", flow_type::NUMBER, flow_type::NUMBER)
+        format!(
+            "{{| +secs: {}, +nanos: {} |}}",
+            flow_type::NUMBER,
+            flow_type::NUMBER
+        )
     }
     fn inline(cfg: &Config) -> String {
         Self::name(cfg)

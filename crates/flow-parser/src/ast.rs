@@ -228,9 +228,13 @@ pub struct Identifier {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum PropertyKey {
-    Identifier { name: String },
+    Identifier {
+        name: String,
+    },
     /// Quoted key — Flow parser emits `Literal` (not `StringLiteral`) for property keys.
-    Literal { value: serde_json::Value },
+    Literal {
+        value: serde_json::Value,
+    },
     #[serde(other)]
     Other,
 }

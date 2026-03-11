@@ -263,7 +263,9 @@ mod tests {
 
         // Assert
         match &program.body[0] {
-            Statement::DeclareExportDeclaration { declaration: Some(decl) } => match decl {
+            Statement::DeclareExportDeclaration {
+                declaration: Some(decl),
+            } => match decl {
                 Declaration::OpaqueType { id, .. } | Declaration::DeclareOpaqueType { id, .. } => {
                     assert_eq!(id.name, "Token", "opaque type name");
                 }
