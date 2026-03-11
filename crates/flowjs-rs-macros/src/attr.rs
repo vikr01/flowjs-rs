@@ -192,6 +192,7 @@ pub struct FieldAttr {
     /// serde: `skip_serializing_if` or `skip_serializing` seen
     pub maybe_omitted: bool,
     /// serde: `default` seen
+    #[allow(dead_code)]
     pub has_default: bool,
 }
 
