@@ -4,25 +4,16 @@
 //! generated Flow source and assert on the typed Rust AST — no inline JS.
 
 use flow_parser::{
-    Declaration, FlowParser, ObjectMember, PropertyKey, Statement, TypeAnnotation, VarianceKind,
+    Declaration, FlowParser, ObjectMember, Statement, TypeAnnotation, VarianceKind,
 };
 use flowjs_rs::{Config, Flow};
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-/// Wrap a type declaration in `// @flow` + `export` like the real export logic.
-fn as_flow_file(decl: &str) -> String {
-    if decl.starts_with("declare export") {
-        format!("// @flow\n{decl}\n")
-    } else {
-        format!("// @flow\nexport {decl}\n")
-    }
-}
-
-/// Parse a Flow file and extract the first declaration's type alias right-hand side.
-fn parse_type_alias(parser: &FlowParser, source: &str) -> (String, TypeAnnotation) {
-    let program = parser.parse(source).unwrap_or_else(|e| {
-        panic!("parse failed for:\n{source}\n\nError: {e}")
+/// Validate a declaration and extract the type alias name + right-hand side.
+fn parse_type_alias(parser: &FlowParser, decl: &str) -> (String, TypeAnnotation) {
+    let program = parser.validate_declaration(decl).unwrap_or_else(|e| {
+        panic!("Flow validation failed for:\n{decl}\n\nError: {e}")
     });
 
     match &program.body[0] {
@@ -175,10 +166,9 @@ fn ast_simple_struct_fields() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&SimpleStruct::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &SimpleStruct::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -217,10 +207,9 @@ fn ast_option_produces_nullable() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&WithOption::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &WithOption::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -255,10 +244,9 @@ fn ast_vec_produces_readonly_array() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&WithVec::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &WithVec::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -290,10 +278,9 @@ fn ast_newtype_inlines_to_string() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&Newtype::decl(&cfg));
 
     // Act
-    let (name, ty) = parse_type_alias(&parser, &source);
+    let (name, ty) = parse_type_alias(&parser, &Newtype::decl(&cfg));
 
     // Assert
     assert_eq!(name, "Newtype", "type name");
@@ -305,10 +292,9 @@ fn ast_unit_struct_is_void() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&UnitStruct::decl(&cfg));
 
     // Act
-    let (name, ty) = parse_type_alias(&parser, &source);
+    let (name, ty) = parse_type_alias(&parser, &UnitStruct::decl(&cfg));
 
     // Assert
     assert_eq!(name, "UnitStruct", "type name");
@@ -320,10 +306,9 @@ fn ast_camel_case_rename() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&CamelCase::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &CamelCase::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -342,10 +327,9 @@ fn ast_opaque_type() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&OpaqueToken::decl(&cfg));
 
     // Act
-    let program = parser.parse(&source).unwrap();
+    let program = parser.validate_declaration(&OpaqueToken::decl(&cfg)).unwrap();
 
     // Assert
     match &program.body[0] {
@@ -368,10 +352,9 @@ fn ast_bounded_opaque_type() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&BoundedOpaque::decl(&cfg));
 
     // Act
-    let program = parser.parse(&source).unwrap();
+    let program = parser.validate_declaration(&BoundedOpaque::decl(&cfg)).unwrap();
 
     // Assert
     match &program.body[0] {
@@ -398,10 +381,9 @@ fn ast_untagged_enum_is_union() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&UntaggedUnion::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &UntaggedUnion::decl(&cfg));
 
     // Assert
     match &ty {
@@ -417,10 +399,9 @@ fn ast_tagged_enum_has_tag_field() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&TaggedUnion::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &TaggedUnion::decl(&cfg));
 
     // Assert — Click variant has +kind: 'Click'
     let union_types = match &ty {
@@ -448,10 +429,9 @@ fn ast_adjacently_tagged_has_content_field() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&AdjacentlyTagged::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &AdjacentlyTagged::decl(&cfg));
     let union_types = match &ty {
         TypeAnnotation::UnionTypeAnnotation { types } => types,
         other => panic!("expected UnionTypeAnnotation, got: {}", other.type_name()),
@@ -488,10 +468,9 @@ fn ast_kebab_case_fields_quoted() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&KebabFields::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &KebabFields::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -514,10 +493,9 @@ fn ast_optional_variant_fields() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&OptionalVariantFields::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &OptionalVariantFields::decl(&cfg));
     let union_types = match &ty {
         TypeAnnotation::UnionTypeAnnotation { types } => types,
         // Single variant may not be wrapped in union
@@ -557,10 +535,9 @@ fn ast_tuple_in_struct() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&WithTuple::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &WithTuple::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -585,10 +562,9 @@ fn ast_hashmap_produces_indexer() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&WithHashMap::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &WithHashMap::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -621,10 +597,9 @@ fn ast_renamed_variant_fields() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&RenamedVariantFields::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &RenamedVariantFields::decl(&cfg));
 
     // Assert — externally tagged: {| MY_VARIANT: {| +firstName: ..., +lastName: ... |} |}
     let props = match &ty {
@@ -651,10 +626,9 @@ fn ast_nested_struct_references_type() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&Nested::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &Nested::decl(&cfg));
     let props = object_properties(&ty);
 
     // Assert
@@ -677,10 +651,9 @@ fn ast_internally_tagged_newtype_intersection() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&InternallyTaggedNewtype::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &InternallyTaggedNewtype::decl(&cfg));
     let union_types = match &ty {
         TypeAnnotation::UnionTypeAnnotation { types } => types,
         other => panic!("expected UnionTypeAnnotation, got: {}", other.type_name()),
@@ -699,10 +672,9 @@ fn ast_externally_tagged_has_variant_keys() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
-    let source = as_flow_file(&ExternallyTagged::decl(&cfg));
 
     // Act
-    let (_, ty) = parse_type_alias(&parser, &source);
+    let (_, ty) = parse_type_alias(&parser, &ExternallyTagged::decl(&cfg));
 
     // Assert
     match &ty {
@@ -789,8 +761,7 @@ fn validate_all_types_parse() {
     // Act and Assert
     let mut failures = Vec::new();
     for (name, decl) in &decls {
-        let source = as_flow_file(decl);
-        if let Err(e) = parser.parse(&source) {
+        if let Err(e) = parser.validate_declaration(decl) {
             failures.push(format!("{name}: {e}\n  {decl}"));
         }
     }

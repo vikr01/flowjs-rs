@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "flow-parser": "^0.266.1",
+      },
+    },
+  },
+  "packages": {
+    "flow-parser": ["flow-parser@0.266.1", "", {}, "sha512-dON6h+yO7FGa/FO5NQCZuZHN0o3I23Ev6VYOJf9d8LpdrArHPt39wE++LLmueNV/hNY5hgWGIIrgnrDkRcXkPg=="],
+  }
+}
