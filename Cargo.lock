@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "flowjs-rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chrono",
  "flow-parser",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "flowjs-rs-macros"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "proc-macro2",
  "quote",

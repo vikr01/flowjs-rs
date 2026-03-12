@@ -1,6 +1,6 @@
 [package]
 name = "flowjs-rs-macros"
-version = "0.3.1"
+version = "0.0.0-alpha.0"
 edition = "2021"
 rust-version = "1.78.0"
 description = "Derive macro for flowjs-rs"
