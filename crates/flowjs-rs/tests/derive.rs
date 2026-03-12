@@ -1,5 +1,7 @@
 //! Integration tests for the Flow derive macro.
 
+#![allow(dead_code)]
+
 use flowjs_rs::{Config, Flow};
 
 #[derive(Flow)]

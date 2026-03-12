@@ -3,6 +3,8 @@
 //! Uses the `flow-parser` crate (QuickJS + npm's flow-parser) to parse
 //! generated Flow source and assert on the typed Rust AST — no inline JS.
 
+#![allow(dead_code)]
+
 use flow_parser::{Declaration, FlowParser, ObjectMember, Statement, TypeAnnotation, VarianceKind};
 use flowjs_rs::{Config, Flow};
 
