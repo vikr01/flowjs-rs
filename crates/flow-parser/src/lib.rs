@@ -25,8 +25,8 @@ const FLOW_PARSER_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/flow_parser
 pub enum Error {
     /// QuickJS runtime error.
     Runtime(String),
-    /// Flow parser reported syntax errors.
-    Parse(Vec<String>),
+    /// Flow parser reported syntax errors. Each entry carries message and location.
+    Parse(Vec<ParseError>),
     /// Failed to deserialize the AST JSON.
     Deserialize(String),
 }
@@ -36,7 +36,8 @@ impl std::fmt::Display for Error {
         match self {
             Self::Runtime(msg) => write!(f, "runtime error: {msg}"),
             Self::Parse(errors) => {
-                write!(f, "parse errors: {}", errors.join("; "))
+                let msgs: Vec<&str> = errors.iter().map(|e| e.message.as_str()).collect();
+                write!(f, "parse errors: {}", msgs.join("; "))
             }
             Self::Deserialize(msg) => write!(f, "AST deserialization error: {msg}"),
         }
@@ -96,8 +97,7 @@ impl FlowParser {
             serde_json::from_str(&json).map_err(|e| Error::Deserialize(e.to_string()))?;
 
         if !program.errors.is_empty() {
-            let messages = program.errors.iter().map(|e| e.message.clone()).collect();
-            return Err(Error::Parse(messages));
+            return Err(Error::Parse(program.errors));
         }
 
         Ok(program)
@@ -108,6 +108,18 @@ impl FlowParser {
     /// Returns `Ok(())` if the source parses without errors, `Err` otherwise.
     pub fn validate(&self, source: &str) -> Result<(), Error> {
         self.parse(source).map(|_| ())
+    }
+
+    /// Parse source and return all diagnostics (parse errors with location).
+    ///
+    /// Returns `Ok(vec![])` for valid source. Returns `Ok(errors)` when the
+    /// source has parse errors — each error carries a message and source location.
+    /// Returns `Err` only on runtime or deserialization failure.
+    pub fn diagnostics(&self, source: &str) -> Result<Vec<ParseError>, Error> {
+        let json = self.parse_json(source)?;
+        let program: Program =
+            serde_json::from_str(&json).map_err(|e| Error::Deserialize(e.to_string()))?;
+        Ok(program.errors)
     }
 
     /// Validate a Flow type declaration by wrapping it in a `// @flow` file.
@@ -273,5 +285,64 @@ mod tests {
             },
             other => panic!("unexpected statement: {other:?}"),
         }
+    }
+
+    #[test]
+    fn diagnostics_valid_source_returns_empty() {
+        // Arrange
+        let parser = FlowParser::new().expect("failed to create parser");
+
+        // Act
+        let diags = parser
+            .diagnostics("// @flow\nexport type Foo = string;")
+            .expect("runtime error");
+
+        // Assert
+        assert!(
+            diags.is_empty(),
+            "valid source should produce no diagnostics"
+        );
+    }
+
+    #[test]
+    fn diagnostics_error_without_loc_deserializes() {
+        // Arrange — synthesize a payload where loc is absent
+        let payload = r#"{"type":"Program","body":[],"errors":[{"message":"synthetic error"}]}"#;
+
+        // Act
+        let program: Program = serde_json::from_str(payload).expect("should deserialize");
+
+        // Assert
+        assert_eq!(program.errors.len(), 1, "should have one error");
+        assert_eq!(
+            program.errors[0].message, "synthetic error",
+            "message preserved"
+        );
+        assert!(
+            program.errors[0].loc.is_none(),
+            "loc should be None when absent"
+        );
+    }
+
+    #[test]
+    fn diagnostics_invalid_source_returns_errors_with_location() {
+        // Arrange
+        let parser = FlowParser::new().expect("failed to create parser");
+
+        // Act
+        let diags = parser.diagnostics("type = ;").expect("runtime error");
+
+        // Assert
+        assert!(
+            !diags.is_empty(),
+            "invalid source should produce diagnostics"
+        );
+        let first = &diags[0];
+        assert!(
+            !first.message.is_empty(),
+            "diagnostic should have a message"
+        );
+        let loc = first.loc.as_ref().expect("diagnostic should have location");
+        assert!(loc.start.line >= 1, "start line should be >= 1");
     }
 }

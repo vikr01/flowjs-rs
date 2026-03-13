@@ -34,6 +34,21 @@ pub struct Program {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ParseError {
     pub message: String,
+    pub loc: Option<SourceLocation>,
+}
+
+/// Source location attached to a parse error.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceLocation {
+    pub start: Position,
+    pub end: Position,
+}
+
+/// Line and column (both 1-based for line, 0-based for column, matching Flow convention).
+#[derive(Debug, Clone, Deserialize)]
+pub struct Position {
+    pub line: u32,
+    pub column: u32,
 }
 
 // ── Statements ──────────────────────────────────────────────────────────
