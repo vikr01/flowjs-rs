@@ -28,6 +28,6 @@ uuid = {version = "1", optional = true}
 url = {version = "2", optional = true}
 
 [dev-dependencies]
-flow-parser = {path = "../flow-parser"}
+flowjs-parser = {path = "../flow-parser"}
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"

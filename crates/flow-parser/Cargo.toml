@@ -1,5 +1,5 @@
 [package]
-name = "flow-parser"
+name = "flowjs-parser"
 version = "0.0.0-alpha.0"
 edition = "2021"
 rust-version = "1.78.0"
