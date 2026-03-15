@@ -10,4 +10,4 @@ categories = ["development-tools::procedural-macro-helpers"]
 
 [dependencies]
 syn = { version = "2", features = ["full", "parsing"] }
-derive-inflection = { path = "../derive-inflection" }
+derive-inflection = { version = "0.1.0", path = "../derive-inflection" }
