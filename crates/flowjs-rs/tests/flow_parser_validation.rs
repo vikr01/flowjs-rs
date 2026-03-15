@@ -5,7 +5,10 @@
 
 #![allow(dead_code)]
 
-use flow_parser::{Declaration, FlowParser, ObjectMember, Statement, TypeAnnotation, VarianceKind};
+use flowjs_parser::{
+    Declaration, EnumBody, EnumMember, FlowParser, ObjectMember, Statement, TypeAnnotation,
+    VarianceKind,
+};
 use flowjs_rs::{Config, Flow};
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -159,6 +162,38 @@ struct WithHashMap {
     data: std::collections::HashMap<String, i32>,
 }
 
+#[derive(Flow)]
+#[flow(flow_enum)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "string", rename_all = "lowercase")]
+enum Priority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "string")]
+enum Suit {
+    Clubs,
+    Diamonds,
+    Hearts,
+    Spades,
+}
+
+#[derive(Flow)]
+struct WithFlowEnum {
+    direction: Direction,
+    priority: Priority,
+}
+
 // ── AST structure tests ─────────────────────────────────────────────────
 
 #[test]
@@ -183,10 +218,9 @@ fn ast_simple_struct_fields() {
         } => {
             assert_eq!(key.name().unwrap(), "name", "first field name");
             assert_eq!(value.type_name(), "StringTypeAnnotation", "String → string");
-            assert_eq!(
-                variance.as_ref().unwrap().kind,
-                VarianceKind::Plus,
-                "covariant (+)"
+            assert!(
+                variance.is_none(),
+                "default: no variance annotation (matches ts-rs)"
             );
         }
         other => panic!("expected ObjectTypeProperty, got: {other:?}"),
@@ -272,7 +306,7 @@ fn ast_vec_produces_readonly_array() {
                     id,
                     type_parameters,
                 } => {
-                    assert_eq!(id.name, "$ReadOnlyArray", "Vec → $ReadOnlyArray");
+                    assert_eq!(id.name().unwrap(), "$ReadOnlyArray", "Vec → $ReadOnlyArray");
                     let params = &type_parameters.as_ref().unwrap().params;
                     assert_eq!(
                         params[0].type_name(),
@@ -306,7 +340,7 @@ fn ast_newtype_inlines_to_string() {
 }
 
 #[test]
-fn ast_unit_struct_is_void() {
+fn ast_unit_struct_is_null() {
     // Arrange
     let parser = FlowParser::new().unwrap();
     let cfg = Config::new();
@@ -316,7 +350,7 @@ fn ast_unit_struct_is_void() {
 
     // Assert
     assert_eq!(name, "UnitStruct", "type name");
-    assert_eq!(ty.type_name(), "VoidTypeAnnotation", "unit struct → void");
+    assert_eq!(ty.type_name(), "NullLiteralTypeAnnotation", "unit struct → null (matches ts-rs)");
 }
 
 #[test]
@@ -357,7 +391,10 @@ fn ast_opaque_type() {
 
     // Assert
     match &program.body[0] {
-        Statement::DeclareExportDeclaration {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(decl),
+        }
+        | Statement::DeclareExportDeclaration {
             declaration: Some(decl),
         } => match decl {
             Declaration::OpaqueType { id, supertype }
@@ -384,7 +421,10 @@ fn ast_bounded_opaque_type() {
 
     // Assert
     match &program.body[0] {
-        Statement::DeclareExportDeclaration {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(decl),
+        }
+        | Statement::DeclareExportDeclaration {
             declaration: Some(decl),
         } => match decl {
             Declaration::OpaqueType { id, supertype }
@@ -689,7 +729,7 @@ fn ast_nested_struct_references_type() {
             assert_eq!(key.name().unwrap(), "inner", "field name");
             match value {
                 TypeAnnotation::GenericTypeAnnotation { id, .. } => {
-                    assert_eq!(id.name, "SimpleStruct", "references SimpleStruct by name");
+                    assert_eq!(id.name().unwrap(), "SimpleStruct", "references SimpleStruct by name");
                 }
                 other => panic!("expected GenericTypeAnnotation, got: {}", other.type_name()),
             }
@@ -753,7 +793,7 @@ fn flow_type_any_for_dummy() {
 fn flow_type_void_for_unit() {
     // Arrange and Act and Assert
     let cfg = Config::new();
-    assert_eq!(<() as Flow>::name(&cfg), "void", "() → void");
+    assert_eq!(<() as Flow>::name(&cfg), "null", "() → null (matches ts-rs)");
 }
 
 #[test]
@@ -777,10 +817,226 @@ fn primitives_are_exact_not_expanded() {
     assert_eq!(String::name(&cfg), "string", "String → string");
     assert_eq!(i32::name(&cfg), "number", "i32 → number");
     assert_eq!(bool::name(&cfg), "boolean", "bool → boolean");
-    assert_eq!(<()>::name(&cfg), "void", "() → void");
+    assert_eq!(<()>::name(&cfg), "null", "() → null");
     assert_eq!(f64::name(&cfg), "number", "f64 → number");
     assert_eq!(char::name(&cfg), "string", "char → string");
     assert_eq!(u8::name(&cfg), "number", "u8 → number");
+}
+
+// ── Flow enum tests ─────────────────────────────────────────────────────
+
+/// Helper to parse a Flow enum declaration and extract the id + body.
+fn parse_enum_decl(parser: &FlowParser, decl: &str) -> (String, EnumBody) {
+    let program = parser
+        .validate_declaration(decl)
+        .unwrap_or_else(|e| panic!("Flow validation failed for:\n{decl}\n\nError: {e}"));
+
+    match &program.body[0] {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(Declaration::EnumDeclaration { id, body }),
+        } => (id.name.clone(), body.clone()),
+        other => panic!("expected ExportNamedDeclaration(EnumDeclaration), got: {other:?}"),
+    }
+}
+
+#[test]
+fn ast_flow_enum_symbol() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+    let cfg = Config::new();
+
+    // Act
+    let (name, body) = parse_enum_decl(&parser, &Direction::decl(&cfg));
+
+    // Assert
+    assert_eq!(name, "Direction", "enum name");
+    // Flow parser represents symbol enums as EnumStringBody with explicitType=false
+    // and all members as EnumDefaultedMember
+    match &body {
+        EnumBody::EnumStringBody {
+            members,
+            explicit_type,
+            ..
+        } => {
+            assert!(!explicit_type, "symbol enum has explicitType=false");
+            assert_eq!(members.len(), 4, "should have 4 members");
+
+            let names: Vec<&str> = members.iter().filter_map(|m| m.name()).collect();
+            assert_eq!(names, vec!["Up", "Down", "Left", "Right"], "member names");
+
+            // All members should be defaulted (symbol enum)
+            for m in members {
+                assert!(
+                    matches!(m, EnumMember::EnumDefaultedMember { .. }),
+                    "symbol enum members should be defaulted, got: {m:?}"
+                );
+            }
+        }
+        other => panic!("expected EnumStringBody, got: {}", other.type_name()),
+    }
+}
+
+#[test]
+fn ast_flow_enum_string_with_rename() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+    let cfg = Config::new();
+
+    // Act
+    let (name, body) = parse_enum_decl(&parser, &Priority::decl(&cfg));
+
+    // Assert
+    assert_eq!(name, "Priority", "enum name");
+    assert_eq!(body.type_name(), "EnumStringBody", "should be string body");
+    let members = body.members();
+    assert_eq!(members.len(), 3, "should have 3 members");
+
+    // Verify member names and values
+    match &members[0] {
+        EnumMember::EnumStringMember { id, init } => {
+            assert_eq!(id.name, "Low", "member name");
+            assert_eq!(init.value, "low", "lowercase value");
+        }
+        other => panic!("expected EnumStringMember, got: {other:?}"),
+    }
+    match &members[1] {
+        EnumMember::EnumStringMember { id, init } => {
+            assert_eq!(id.name, "Medium", "member name");
+            assert_eq!(init.value, "medium", "lowercase value");
+        }
+        other => panic!("expected EnumStringMember, got: {other:?}"),
+    }
+    match &members[2] {
+        EnumMember::EnumStringMember { id, init } => {
+            assert_eq!(id.name, "High", "member name");
+            assert_eq!(init.value, "high", "lowercase value");
+        }
+        other => panic!("expected EnumStringMember, got: {other:?}"),
+    }
+}
+
+#[test]
+fn ast_flow_enum_string_no_rename() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+    let cfg = Config::new();
+
+    // Act
+    let (name, body) = parse_enum_decl(&parser, &Suit::decl(&cfg));
+
+    // Assert
+    assert_eq!(name, "Suit", "enum name");
+    assert_eq!(body.type_name(), "EnumStringBody", "should be string body");
+    let members = body.members();
+    assert_eq!(members.len(), 4, "should have 4 members");
+
+    // Without rename_all, values match variant names
+    match &members[0] {
+        EnumMember::EnumStringMember { id, init } => {
+            assert_eq!(id.name, "Clubs", "member name");
+            assert_eq!(init.value, "Clubs", "value matches name (no rename)");
+        }
+        other => panic!("expected EnumStringMember, got: {other:?}"),
+    }
+}
+
+#[test]
+fn ast_flow_enum_used_as_field() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+    let cfg = Config::new();
+
+    // Act — struct with flow enum fields should reference enum by name
+    let (_, ty) = parse_type_alias(&parser, &WithFlowEnum::decl(&cfg));
+    let props = object_properties(&ty);
+
+    // Assert
+    assert_eq!(props.len(), 2, "should have 2 fields");
+    match &props[0] {
+        ObjectMember::ObjectTypeProperty { key, value, .. } => {
+            assert_eq!(key.name().unwrap(), "direction", "field name");
+            match value {
+                TypeAnnotation::GenericTypeAnnotation { id, .. } => {
+                    assert_eq!(id.name().unwrap(), "Direction", "references Direction enum by name");
+                }
+                other => panic!("expected GenericTypeAnnotation, got: {}", other.type_name()),
+            }
+        }
+        other => panic!("expected ObjectTypeProperty, got: {other:?}"),
+    }
+}
+
+// ── Flow parser AST completeness ────────────────────────────────────────
+
+#[test]
+fn ast_parses_function_type() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+
+    // Act
+    let program = parser
+        .parse("export type Callback = (x: string, y: number) => boolean;")
+        .unwrap();
+
+    // Assert
+    match &program.body[0] {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(Declaration::TypeAlias { right, .. }),
+        } => {
+            assert_eq!(
+                right.type_name(),
+                "FunctionTypeAnnotation",
+                "should parse function type"
+            );
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+#[test]
+fn ast_parses_interface_declaration() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+
+    // Act
+    let program = parser
+        .parse("export interface Foo { x: number; y: string; }")
+        .unwrap();
+
+    // Assert
+    match &program.body[0] {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(Declaration::InterfaceDeclaration { id, .. }),
+        } => {
+            assert_eq!(id.name, "Foo", "interface name");
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+#[test]
+fn ast_parses_indexed_access_type() {
+    // Arrange
+    let parser = FlowParser::new().unwrap();
+
+    // Act
+    let program = parser
+        .parse("export type T = Obj['key'];")
+        .unwrap();
+
+    // Assert
+    match &program.body[0] {
+        Statement::ExportNamedDeclaration {
+            declaration: Some(Declaration::TypeAlias { right, .. }),
+        } => {
+            assert_eq!(
+                right.type_name(),
+                "IndexedAccessType",
+                "should parse indexed access"
+            );
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
 }
 
 // ── Batch parse validation ──────────────────────────────────────────────
@@ -818,6 +1074,9 @@ fn validate_all_types_parse() {
         ("WithTuple", WithTuple::decl(&cfg)),
         ("KebabFields", KebabFields::decl(&cfg)),
         ("WithHashMap", WithHashMap::decl(&cfg)),
+        ("Direction", Direction::decl(&cfg)),
+        ("Priority", Priority::decl(&cfg)),
+        ("Suit", Suit::decl(&cfg)),
     ];
 
     // Act and Assert

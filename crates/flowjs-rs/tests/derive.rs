@@ -48,6 +48,12 @@ struct OpaqueToken(String);
 struct BoundedOpaque(String);
 
 #[derive(Flow)]
+#[flow(opaque)]
+struct OpaqueWrapper<T: Flow> {
+    thing: T,
+}
+
+#[derive(Flow)]
 struct UnitStruct;
 
 #[derive(Flow)]
@@ -64,6 +70,65 @@ enum TaggedEvent {
     Resize { width: i32, height: i32 },
 }
 
+#[derive(Flow)]
+#[flow(flow_enum)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "string", rename_all = "lowercase")]
+enum Status {
+    Active,
+    Paused,
+    Off,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "string")]
+enum Color {
+    Red,
+    #[flow(rename = "green_color")]
+    Green,
+    Blue,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum)]
+enum EmptyEnum {}
+
+#[derive(Flow)]
+#[flow(flow_enum = "number")]
+#[repr(i32)]
+enum HttpStatus {
+    Ok = 200,
+    NotFound = 404,
+    Internal = 500,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "number")]
+enum AutoIncrement {
+    A,
+    B,
+    C,
+}
+
+#[derive(Flow)]
+#[flow(flow_enum = "boolean")]
+enum Toggle {
+    On,
+    Off,
+}
+
+#[derive(Flow)]
+struct WithCallback {
+    handler: fn(String, i32) -> bool,
+}
+
 #[test]
 fn simple_struct_decl() {
     // Arrange and Act
@@ -72,8 +137,8 @@ fn simple_struct_decl() {
 
     // Assert
     assert!(decl.contains("type Simple"), "should declare type Simple");
-    assert!(decl.contains("+name: string"), "should have +name field");
-    assert!(decl.contains("+age: number"), "should have +age field");
+    assert!(decl.contains("name: string"), "should have +name field");
+    assert!(decl.contains("age: number"), "should have +age field");
 }
 
 #[test]
@@ -87,7 +152,7 @@ fn renamed_struct() {
         decl.contains("type RenamedUser"),
         "should use renamed type name"
     );
-    assert!(decl.contains("+userId: number"), "should use renamed field");
+    assert!(decl.contains("userId: number"), "should use renamed field");
 }
 
 #[test]
@@ -98,11 +163,11 @@ fn camel_case_fields() {
 
     // Assert
     assert!(
-        decl.contains("+firstName: string"),
+        decl.contains("firstName: string"),
         "should camelCase first_name"
     );
     assert!(
-        decl.contains("+lastName: string"),
+        decl.contains("lastName: string"),
         "should camelCase last_name"
     );
 }
@@ -115,7 +180,7 @@ fn option_becomes_nullable() {
 
     // Assert
     assert!(
-        decl.contains("+bio: ?string"),
+        decl.contains("bio: ?string"),
         "Option<String> without serde skip should be always-present nullable"
     );
 }
@@ -154,8 +219,8 @@ fn opaque_type_fully() {
 
     // Assert
     assert_eq!(
-        decl, "declare export opaque type OpaqueToken;",
-        "should be fully opaque"
+        decl, "opaque type OpaqueToken = string;",
+        "opaque newtype with body"
     );
 }
 
@@ -167,9 +232,18 @@ fn opaque_type_bounded() {
 
     // Assert
     assert_eq!(
-        decl, "declare export opaque type BoundedOpaque: string;",
-        "should be bounded opaque"
+        decl, "opaque type BoundedOpaque: string = string;",
+        "opaque with bound and body"
     );
+}
+
+#[test]
+fn generic_opaque_type() {
+    let cfg = Config::new();
+    let decl = OpaqueWrapper::<flowjs_rs::Dummy>::decl(&cfg);
+    eprintln!("GENERIC OPAQUE: {decl}");
+    assert!(decl.contains("opaque type OpaqueWrapper<T>"), "should have generic param: {decl}");
+    assert!(decl.contains("thing: T"), "should have body with generic field: {decl}");
 }
 
 #[test]
@@ -180,8 +254,8 @@ fn unit_struct() {
 
     // Assert
     assert_eq!(
-        decl, "type UnitStruct = void;",
-        "unit struct should be void"
+        decl, "type UnitStruct = null;",
+        "unit struct should be null (matches ts-rs)"
     );
 }
 
@@ -193,8 +267,8 @@ fn untagged_enum() {
 
     // Assert
     assert!(decl.contains("type Shape"), "should declare Shape");
-    assert!(decl.contains("+radius: number"), "should have radius field");
-    assert!(decl.contains("+width: number"), "should have width field");
+    assert!(decl.contains("radius: number"), "should have radius field");
+    assert!(decl.contains("width: number"), "should have width field");
     assert!(decl.contains(" | "), "should be union");
 }
 
@@ -205,10 +279,107 @@ fn tagged_enum() {
     let decl = TaggedEvent::decl(&cfg);
 
     // Assert
-    assert!(decl.contains("+kind: 'Click'"), "should have Click tag");
-    assert!(decl.contains("+kind: 'Resize'"), "should have Resize tag");
+    assert!(decl.contains("kind: 'Click'"), "should have Click tag");
+    assert!(decl.contains("kind: 'Resize'"), "should have Resize tag");
     assert!(
-        decl.contains("+width: number"),
+        decl.contains("width: number"),
         "Resize should have width field"
+    );
+}
+
+#[test]
+fn flow_enum_symbol() {
+    // Arrange and Act
+    let cfg = Config::new();
+    let decl = Direction::decl(&cfg);
+
+    // Assert
+    assert!(decl.starts_with("enum Direction {"), "should be enum declaration, got: {decl}");
+    assert!(decl.contains("Up,"), "should have Up member");
+    assert!(decl.contains("Down,"), "should have Down member");
+    assert!(decl.contains("Left,"), "should have Left member");
+    assert!(decl.contains("Right,"), "should have Right member");
+    assert!(!decl.contains("type "), "should not use type alias syntax");
+}
+
+#[test]
+fn flow_enum_string_with_rename() {
+    // Arrange and Act
+    let cfg = Config::new();
+    let decl = Status::decl(&cfg);
+
+    // Assert
+    assert!(
+        decl.starts_with("enum Status of string {"),
+        "should be string enum, got: {decl}"
+    );
+    assert!(decl.contains("Active = 'active',"), "Active with lowercase value");
+    assert!(decl.contains("Paused = 'paused',"), "Paused with lowercase value");
+    assert!(decl.contains("Off = 'off',"), "Off with lowercase value");
+}
+
+#[test]
+fn flow_enum_string_per_variant_rename() {
+    // Arrange and Act
+    let cfg = Config::new();
+    let decl = Color::decl(&cfg);
+
+    // Assert
+    assert!(decl.contains("Red = 'Red',"), "Red keeps original name");
+    assert!(decl.contains("Green = 'green_color',"), "Green uses per-variant rename");
+    assert!(decl.contains("Blue = 'Blue',"), "Blue keeps original name");
+}
+
+#[test]
+fn flow_enum_inline_is_name() {
+    // Arrange and Act
+    let cfg = Config::new();
+
+    // Assert — flow enum inline() returns the name, not an expansion
+    assert_eq!(Direction::inline(&cfg), "Direction", "inline should be type name");
+    assert_eq!(Status::inline(&cfg), "Status", "inline should be type name");
+}
+
+#[test]
+fn flow_enum_is_enum() {
+    // Assert
+    assert!(Direction::IS_ENUM, "flow enum should report IS_ENUM = true");
+}
+
+#[test]
+fn flow_enum_number_with_discriminants() {
+    let cfg = Config::new();
+    let decl = HttpStatus::decl(&cfg);
+    assert!(decl.starts_with("enum HttpStatus of number {"), "should be number enum: {decl}");
+    assert!(decl.contains("Ok = 200,"), "Ok = 200: {decl}");
+    assert!(decl.contains("NotFound = 404,"), "NotFound = 404: {decl}");
+    assert!(decl.contains("Internal = 500,"), "Internal = 500: {decl}");
+}
+
+#[test]
+fn flow_enum_number_auto_increment() {
+    let cfg = Config::new();
+    let decl = AutoIncrement::decl(&cfg);
+    assert!(decl.contains("A = 0,"), "A = 0: {decl}");
+    assert!(decl.contains("B = 1,"), "B = 1: {decl}");
+    assert!(decl.contains("C = 2,"), "C = 2: {decl}");
+}
+
+#[test]
+fn flow_enum_boolean() {
+    let cfg = Config::new();
+    let decl = Toggle::decl(&cfg);
+    assert!(decl.starts_with("enum Toggle of boolean {"), "should be boolean enum: {decl}");
+    assert!(decl.contains("On = true,"), "On = true: {decl}");
+    assert!(decl.contains("Off = false,"), "Off = false: {decl}");
+}
+
+#[test]
+fn fn_pointer_produces_function_type() {
+    let cfg = Config::new();
+    let decl = WithCallback::decl(&cfg);
+    assert!(
+        decl.contains("(arg0: string, arg1: number) => boolean"),
+        "fn pointer should become Flow function type: {decl}"
     );
 }

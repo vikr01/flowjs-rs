@@ -82,16 +82,30 @@ impl_flow_primitive!(i32, flow_type::NUMBER);
 impl_flow_primitive!(u8, flow_type::NUMBER);
 impl_flow_primitive!(u16, flow_type::NUMBER);
 impl_flow_primitive!(u32, flow_type::NUMBER);
-impl_flow_primitive!(i64, flow_type::NUMBER);
-impl_flow_primitive!(u64, flow_type::NUMBER);
-impl_flow_primitive!(i128, flow_type::NUMBER);
-impl_flow_primitive!(u128, flow_type::NUMBER);
+// Large integers — configurable via Config::large_int() (default: bigint).
+// These cannot use impl_flow_primitive! because the type is dynamic.
+macro_rules! impl_flow_large_int {
+    ($($rust_ty:ty),+) => {$(
+        impl Flow for $rust_ty {
+            type WithoutGenerics = Self;
+            type OptionInnerType = Self;
+            fn name(cfg: &Config) -> String {
+                cfg.large_int().to_owned()
+            }
+            fn inline(cfg: &Config) -> String {
+                cfg.large_int().to_owned()
+            }
+        }
+    )+};
+}
+
+impl_flow_large_int!(i64, u64, i128, u128);
 impl_flow_primitive!(f32, flow_type::NUMBER);
 impl_flow_primitive!(f64, flow_type::NUMBER);
 impl_flow_primitive!(char, flow_type::STRING);
 impl_flow_primitive!(String, flow_type::STRING);
 impl_flow_primitive!(str, flow_type::STRING);
-impl_flow_primitive!((), flow_type::VOID);
+impl_flow_primitive!((), flow_type::NULL);
 
 // Option<T> → ?T
 impl<T: Flow> Flow for Option<T> {
@@ -157,6 +171,9 @@ impl_wrapper!(impl<T: Flow + ?Sized> Flow for Box<T>);
 
 // &T → T
 impl_wrapper!(impl<'a, T: Flow + ?Sized> Flow for &'a T);
+
+// &mut T → T
+impl_wrapper!(impl<'a, T: Flow + ?Sized> Flow for &'a mut T);
 
 // std::collections::HashMap → { [key: K]: V }
 impl<K: Flow, V: Flow> Flow for std::collections::HashMap<K, V> {
@@ -269,7 +286,7 @@ impl Flow for serde_json::Value {
         format!("type JsonValue = {};", flow_type::MIXED)
     }
     fn output_path() -> Option<std::path::PathBuf> {
-        Some(std::path::PathBuf::from("JsonValue.js.flow"))
+        Some(std::path::PathBuf::from("JsonValue"))
     }
 }
 
@@ -306,14 +323,14 @@ impl<T: Flow, E: Flow> Flow for Result<T, E> {
 
     fn name(cfg: &Config) -> String {
         format!(
-            "{{| +ok: {} |}} | {{| +err: {} |}}",
+            "{{| Ok: {} |}} | {{| Err: {} |}}",
             T::name(cfg),
             E::name(cfg)
         )
     }
     fn inline(cfg: &Config) -> String {
         format!(
-            "{{| +ok: {} |}} | {{| +err: {} |}}",
+            "{{| Ok: {} |}} | {{| Err: {} |}}",
             T::inline(cfg),
             E::inline(cfg)
         )
@@ -398,6 +415,15 @@ impl_wrapper!(impl<T: Flow> Flow for std::sync::RwLock<T>);
 // usize / isize
 impl_flow_primitive!(usize, flow_type::NUMBER);
 impl_flow_primitive!(isize, flow_type::NUMBER);
+
+// Infallible → empty (bottom type, never inhabited)
+impl_flow_primitive!(std::convert::Infallible, flow_type::EMPTY);
+
+// Wrapping<T> → T (serializes as inner type)
+impl_wrapper!(impl<T: Flow> Flow for std::num::Wrapping<T>);
+
+// Saturating<T> → T (serializes as inner type)
+impl_wrapper!(impl<T: Flow> Flow for std::num::Saturating<T>);
 
 // NonZero* types → number
 impl_shadow!(as u8: impl Flow for std::num::NonZeroU8);
@@ -515,3 +541,56 @@ impl_flow_primitive!(uuid::Uuid, flow_type::STRING);
 // url::Url → string
 #[cfg(feature = "url-impl")]
 impl_flow_primitive!(url::Url, flow_type::STRING);
+
+// fn pointers → Flow function types: (arg0: A, arg1: B) => R
+macro_rules! impl_flow_fn {
+    // Base case: fn() -> R (no arguments)
+    (impl fn() -> R) => {
+        impl<R: Flow> Flow for fn() -> R {
+            type WithoutGenerics = Self;
+            type OptionInnerType = Self;
+            fn name(cfg: &Config) -> String {
+                format!("() => {}", R::name(cfg))
+            }
+            fn inline(cfg: &Config) -> String {
+                format!("() => {}", R::inline(cfg))
+            }
+        }
+    };
+    // Recursive case: fn(A, B, ...) -> R
+    (impl fn($($i:tt: $T:ident),+) -> R) => {
+        impl<$($T: Flow,)+ R: Flow> Flow for fn($($T),+) -> R {
+            type WithoutGenerics = Self;
+            type OptionInnerType = Self;
+            fn name(cfg: &Config) -> String {
+                let params = vec![$(format!("arg{}: {}", $i, $T::name(cfg))),+];
+                format!("({}) => {}", params.join(", "), R::name(cfg))
+            }
+            fn inline(cfg: &Config) -> String {
+                let params = vec![$(format!("arg{}: {}", $i, $T::inline(cfg))),+];
+                format!("({}) => {}", params.join(", "), R::inline(cfg))
+            }
+            fn visit_generics(v: &mut impl TypeVisitor)
+            where
+                Self: 'static,
+            {
+                $(v.visit::<$T>();)+
+                v.visit::<R>();
+            }
+        }
+    };
+}
+
+impl_flow_fn!(impl fn() -> R);
+impl_flow_fn!(impl fn(0: A) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J, 10: K) -> R);
+impl_flow_fn!(impl fn(0: A, 1: B, 2: C, 3: D, 4: E, 5: F, 6: G, 7: H, 8: I, 9: J, 10: K, 11: L) -> R);

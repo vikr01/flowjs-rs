@@ -1,6 +1,6 @@
 [package]
 name = "flowjs-rs"
-version = "0.0.0-alpha.0"
+version = "0.0.0-alpha.1"
 edition = "2021"
 rust-version = "1.78.0"
 description = "Generate Flow type declarations from Rust types"
@@ -20,7 +20,7 @@ uuid-impl = ["uuid"]
 url-impl = ["url"]
 
 [dependencies]
-flowjs-rs-macros = {version = "=0.0.0-alpha.0", path = "../flowjs-rs-macros"}
+flowjs-rs-macros = {version = "=0.0.0-alpha.1", path = "../flowjs-rs-macros"}
 thiserror = "2"
 serde_json = {version = "1", optional = true}
 chrono = {version = "0.4", optional = true}

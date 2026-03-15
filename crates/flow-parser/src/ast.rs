@@ -1,20 +1,7 @@
 //! Typed representation of the Flow parser AST.
 //!
-//! Coverage: primitives, literals, nullable, object, union, intersection,
-//! generic, tuple, array, typeof, opaque. Unrecognized nodes deserialize as
-//! `Other` via `#[serde(other)]`.
-//!
-//! Future: complete the AST to remove all `Other` fallbacks. Missing variants:
-//!   - TypeAnnotation: FunctionTypeAnnotation (params, return, rest, type params),
-//!     InterfaceTypeAnnotation, ExistsTypeAnnotation (*), IndexedAccessType,
-//!     OptionalIndexedAccessType, KeyofTypeAnnotation, ConditionalTypeAnnotation,
-//!     InferTypeAnnotation, TypeOperator, ComponentTypeAnnotation
-//!   - Declaration: InterfaceDeclaration, DeclareTypeAlias, DeclareClass,
-//!     DeclareFunction, DeclareVariable, DeclareModule
-//!   - Statement: ImportDeclaration, DeclareModuleExports, TypeCastExpression
-//!   - PropertyKey: NumberLiteral (numeric keys)
-//!   - ObjectMember: ObjectTypeInternalSlot, ObjectTypeCallProperty
-//!   - Positional info: loc (SourceLocation), range ([start, end]) on all nodes
+//! Comprehensive coverage of all Flow type system nodes. Unrecognized nodes
+//! deserialize as `Other` via `#[serde(other)]` for forward compatibility.
 //!
 //! Reference: https://github.com/facebook/flow/blob/main/src/parser/estree_translator.ml
 
@@ -63,6 +50,26 @@ pub enum Statement {
     DeclareExportDeclaration {
         declaration: Option<Declaration>,
     },
+    ExportDefaultDeclaration {
+        #[serde(default)]
+        declaration: Option<serde_json::Value>,
+    },
+    EnumDeclaration {
+        id: Identifier,
+        body: EnumBody,
+    },
+    ImportDeclaration {
+        #[serde(default)]
+        source: Option<serde_json::Value>,
+        #[serde(default)]
+        specifiers: Vec<serde_json::Value>,
+        #[serde(rename = "importKind", default)]
+        import_kind: Option<String>,
+    },
+    DeclareModuleExports {
+        #[serde(rename = "typeAnnotation")]
+        type_annotation: Box<TypeAnnotation>,
+    },
     /// Catch-all for statement types we don't inspect.
     #[serde(other)]
     Other,
@@ -85,6 +92,35 @@ pub enum Declaration {
     DeclareOpaqueType {
         id: Identifier,
         supertype: Option<TypeAnnotation>,
+    },
+    EnumDeclaration {
+        id: Identifier,
+        body: EnumBody,
+    },
+    InterfaceDeclaration {
+        id: Identifier,
+        #[serde(default)]
+        extends: Vec<InterfaceExtends>,
+        body: TypeAnnotation,
+    },
+    DeclareTypeAlias {
+        id: Identifier,
+        right: TypeAnnotation,
+    },
+    DeclareClass {
+        id: Identifier,
+    },
+    DeclareFunction {
+        id: Identifier,
+    },
+    DeclareVariable {
+        id: Identifier,
+    },
+    DeclareModule {
+        #[serde(default)]
+        id: serde_json::Value,
+        #[serde(default)]
+        body: serde_json::Value,
     },
     #[serde(other)]
     Other,
@@ -118,6 +154,10 @@ pub enum TypeAnnotation {
     BooleanLiteralTypeAnnotation {
         value: bool,
     },
+    BigIntLiteralTypeAnnotation {
+        #[serde(default)]
+        value: Option<serde_json::Value>,
+    },
 
     // Nullable (?T)
     NullableTypeAnnotation {
@@ -131,6 +171,10 @@ pub enum TypeAnnotation {
         properties: Vec<ObjectMember>,
         #[serde(default)]
         indexers: Vec<ObjectTypeIndexer>,
+        #[serde(rename = "callProperties", default)]
+        call_properties: Vec<ObjectTypeCallProperty>,
+        #[serde(rename = "internalSlots", default)]
+        internal_slots: Vec<ObjectTypeInternalSlot>,
         #[serde(default)]
         exact: bool,
     },
@@ -145,9 +189,9 @@ pub enum TypeAnnotation {
         types: Vec<TypeAnnotation>,
     },
 
-    // Named type reference (Foo, $ReadOnlyArray<T>)
+    // Named type reference (Foo, $ReadOnlyArray<T>, React.Node)
     GenericTypeAnnotation {
-        id: Identifier,
+        id: TypeIdentifier,
         #[serde(rename = "typeParameters")]
         type_parameters: Option<TypeParameterInstantiation>,
     },
@@ -168,6 +212,91 @@ pub enum TypeAnnotation {
     // typeof T
     TypeofTypeAnnotation {
         argument: Box<TypeAnnotation>,
+    },
+
+    // Function type ((x: A) => B)
+    FunctionTypeAnnotation {
+        #[serde(default)]
+        params: Vec<FunctionTypeParam>,
+        #[serde(rename = "returnType")]
+        return_type: Box<TypeAnnotation>,
+        #[serde(default)]
+        rest: Option<Box<FunctionTypeParam>>,
+        #[serde(rename = "typeParameters", default)]
+        type_parameters: Option<TypeParameterDeclaration>,
+        #[serde(rename = "this", default)]
+        this_constraint: Option<Box<FunctionTypeParam>>,
+    },
+
+    // Interface type (inline anonymous interface)
+    InterfaceTypeAnnotation {
+        #[serde(default)]
+        extends: Vec<InterfaceExtends>,
+        body: Box<TypeAnnotation>,
+    },
+
+    // Existential type (*)
+    ExistsTypeAnnotation,
+
+    // Indexed access (Obj['key'])
+    IndexedAccessType {
+        #[serde(rename = "objectType")]
+        object_type: Box<TypeAnnotation>,
+        #[serde(rename = "indexType")]
+        index_type: Box<TypeAnnotation>,
+    },
+
+    // Optional indexed access (Obj?.['key'])
+    OptionalIndexedAccessType {
+        #[serde(rename = "objectType")]
+        object_type: Box<TypeAnnotation>,
+        #[serde(rename = "indexType")]
+        index_type: Box<TypeAnnotation>,
+        #[serde(default)]
+        optional: bool,
+    },
+
+    // keyof T
+    KeyofTypeAnnotation {
+        argument: Box<TypeAnnotation>,
+    },
+
+    // Conditional type (A extends B ? C : D)
+    ConditionalTypeAnnotation {
+        #[serde(rename = "checkType")]
+        check_type: Box<TypeAnnotation>,
+        #[serde(rename = "extendsType")]
+        extends_type: Box<TypeAnnotation>,
+        #[serde(rename = "trueType")]
+        true_type: Box<TypeAnnotation>,
+        #[serde(rename = "falseType")]
+        false_type: Box<TypeAnnotation>,
+    },
+
+    // infer T
+    InferTypeAnnotation {
+        #[serde(rename = "typeParameter", default)]
+        type_parameter: Option<serde_json::Value>,
+    },
+
+    // Type operator (renders, renders?, renders*)
+    TypeOperator {
+        #[serde(default)]
+        operator: Option<String>,
+        #[serde(rename = "typeAnnotation")]
+        type_annotation: Box<TypeAnnotation>,
+    },
+
+    // Component type
+    ComponentTypeAnnotation {
+        #[serde(default)]
+        params: Vec<serde_json::Value>,
+        #[serde(default)]
+        rest: Option<serde_json::Value>,
+        #[serde(rename = "typeParameters", default)]
+        type_parameters: Option<TypeParameterDeclaration>,
+        #[serde(rename = "rendersType", default)]
+        renders_type: Option<Box<TypeAnnotation>>,
     },
 
     #[serde(other)]
@@ -191,6 +320,7 @@ impl TypeAnnotation {
             Self::StringLiteralTypeAnnotation { .. } => "StringLiteralTypeAnnotation",
             Self::NumberLiteralTypeAnnotation { .. } => "NumberLiteralTypeAnnotation",
             Self::BooleanLiteralTypeAnnotation { .. } => "BooleanLiteralTypeAnnotation",
+            Self::BigIntLiteralTypeAnnotation { .. } => "BigIntLiteralTypeAnnotation",
             Self::NullableTypeAnnotation { .. } => "NullableTypeAnnotation",
             Self::ObjectTypeAnnotation { .. } => "ObjectTypeAnnotation",
             Self::UnionTypeAnnotation { .. } => "UnionTypeAnnotation",
@@ -199,6 +329,16 @@ impl TypeAnnotation {
             Self::TupleTypeAnnotation { .. } => "TupleTypeAnnotation",
             Self::ArrayTypeAnnotation { .. } => "ArrayTypeAnnotation",
             Self::TypeofTypeAnnotation { .. } => "TypeofTypeAnnotation",
+            Self::FunctionTypeAnnotation { .. } => "FunctionTypeAnnotation",
+            Self::InterfaceTypeAnnotation { .. } => "InterfaceTypeAnnotation",
+            Self::ExistsTypeAnnotation => "ExistsTypeAnnotation",
+            Self::IndexedAccessType { .. } => "IndexedAccessType",
+            Self::OptionalIndexedAccessType { .. } => "OptionalIndexedAccessType",
+            Self::KeyofTypeAnnotation { .. } => "KeyofTypeAnnotation",
+            Self::ConditionalTypeAnnotation { .. } => "ConditionalTypeAnnotation",
+            Self::InferTypeAnnotation { .. } => "InferTypeAnnotation",
+            Self::TypeOperator { .. } => "TypeOperator",
+            Self::ComponentTypeAnnotation { .. } => "ComponentTypeAnnotation",
             Self::Other => "Other",
         }
     }
@@ -231,12 +371,220 @@ pub struct ObjectTypeIndexer {
     pub value: TypeAnnotation,
 }
 
+/// A call property on an object type (`{ (x: number): string }`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ObjectTypeCallProperty {
+    pub value: TypeAnnotation,
+    #[serde(rename = "static", default)]
+    pub is_static: bool,
+}
+
+/// An internal slot on an object type (`{ [[call]](x: number): string }`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ObjectTypeInternalSlot {
+    pub id: Identifier,
+    pub value: TypeAnnotation,
+    #[serde(default)]
+    pub optional: bool,
+    #[serde(rename = "static", default)]
+    pub is_static: bool,
+    #[serde(default)]
+    pub method: bool,
+}
+
+// ── Function type param ─────────────────────────────────────────────────
+
+/// A parameter in a function type annotation.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FunctionTypeParam {
+    #[serde(default)]
+    pub name: Option<Identifier>,
+    #[serde(rename = "typeAnnotation")]
+    pub type_annotation: TypeAnnotation,
+    #[serde(default)]
+    pub optional: bool,
+}
+
+// ── Interface extends ───────────────────────────────────────────────────
+
+/// An `extends` clause in an interface declaration or type.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InterfaceExtends {
+    pub id: Identifier,
+    #[serde(rename = "typeParameters", default)]
+    pub type_parameters: Option<TypeParameterInstantiation>,
+}
+
+// ── Enum types ──────────────────────────────────────────────────────────
+
+/// Body of a Flow enum declaration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum EnumBody {
+    EnumStringBody {
+        members: Vec<EnumMember>,
+        #[serde(rename = "explicitType", default)]
+        explicit_type: bool,
+        #[serde(rename = "hasUnknownMembers", default)]
+        has_unknown_members: bool,
+    },
+    EnumNumberBody {
+        members: Vec<EnumMember>,
+        #[serde(rename = "explicitType", default)]
+        explicit_type: bool,
+        #[serde(rename = "hasUnknownMembers", default)]
+        has_unknown_members: bool,
+    },
+    EnumBooleanBody {
+        members: Vec<EnumMember>,
+        #[serde(rename = "explicitType", default)]
+        explicit_type: bool,
+        #[serde(rename = "hasUnknownMembers", default)]
+        has_unknown_members: bool,
+    },
+    EnumSymbolBody {
+        members: Vec<EnumMember>,
+        #[serde(rename = "hasUnknownMembers", default)]
+        has_unknown_members: bool,
+    },
+    EnumBigIntBody {
+        members: Vec<EnumMember>,
+        #[serde(rename = "explicitType", default)]
+        explicit_type: bool,
+        #[serde(rename = "hasUnknownMembers", default)]
+        has_unknown_members: bool,
+    },
+    #[serde(other)]
+    Other,
+}
+
+impl EnumBody {
+    /// Short type tag for assertions.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::EnumStringBody { .. } => "EnumStringBody",
+            Self::EnumNumberBody { .. } => "EnumNumberBody",
+            Self::EnumBooleanBody { .. } => "EnumBooleanBody",
+            Self::EnumSymbolBody { .. } => "EnumSymbolBody",
+            Self::EnumBigIntBody { .. } => "EnumBigIntBody",
+            Self::Other => "Other",
+        }
+    }
+
+    /// Members of the enum body.
+    pub fn members(&self) -> &[EnumMember] {
+        match self {
+            Self::EnumStringBody { members, .. }
+            | Self::EnumNumberBody { members, .. }
+            | Self::EnumBooleanBody { members, .. }
+            | Self::EnumSymbolBody { members, .. }
+            | Self::EnumBigIntBody { members, .. } => members,
+            Self::Other => &[],
+        }
+    }
+}
+
+/// A member of a Flow enum body.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum EnumMember {
+    /// Defaulted member (symbol enum, or auto-initialized).
+    EnumDefaultedMember {
+        id: Identifier,
+    },
+    /// String-initialized member.
+    EnumStringMember {
+        id: Identifier,
+        init: EnumStringInit,
+    },
+    /// Number-initialized member.
+    EnumNumberMember {
+        id: Identifier,
+        init: EnumNumberInit,
+    },
+    /// Boolean-initialized member.
+    EnumBooleanMember {
+        id: Identifier,
+        init: EnumBooleanInit,
+    },
+    #[serde(other)]
+    Other,
+}
+
+impl EnumMember {
+    /// Name of the enum member, if known.
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::EnumDefaultedMember { id }
+            | Self::EnumStringMember { id, .. }
+            | Self::EnumNumberMember { id, .. }
+            | Self::EnumBooleanMember { id, .. } => Some(&id.name),
+            Self::Other => None,
+        }
+    }
+}
+
+/// String literal init value in a Flow enum member.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EnumStringInit {
+    pub value: String,
+}
+
+/// Number literal init value in a Flow enum member.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EnumNumberInit {
+    pub value: f64,
+}
+
+/// Boolean literal init value in a Flow enum member.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EnumBooleanInit {
+    pub value: bool,
+}
+
 // ── Shared nodes ────────────────────────────────────────────────────────
 
 /// An identifier node.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Identifier {
     pub name: String,
+}
+
+/// A type identifier — either a simple `Identifier` or a qualified `A.B` reference.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum TypeIdentifier {
+    Identifier {
+        name: String,
+    },
+    QualifiedTypeIdentifier {
+        qualification: Box<TypeIdentifier>,
+        id: Identifier,
+    },
+    #[serde(other)]
+    Other,
+}
+
+impl TypeIdentifier {
+    /// The leaf name of this identifier (e.g. `"Node"` for `React.Node`).
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::Identifier { name } => Some(name),
+            Self::QualifiedTypeIdentifier { id, .. } => Some(&id.name),
+            Self::Other => None,
+        }
+    }
+
+    /// Full dotted name (e.g. `"React.Node"`).
+    pub fn full_name(&self) -> String {
+        match self {
+            Self::Identifier { name } => name.clone(),
+            Self::QualifiedTypeIdentifier { qualification, id } => {
+                format!("{}.{}", qualification.full_name(), id.name)
+            }
+            Self::Other => "?".to_owned(),
+        }
+    }
 }
 
 /// Property key — either an identifier or a string literal (for quoted keys).
@@ -288,4 +636,31 @@ pub enum VarianceKind {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TypeParameterInstantiation {
     pub params: Vec<TypeAnnotation>,
+}
+
+/// Type parameter declaration (`<T: Bound, U = Default>`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct TypeParameterDeclaration {
+    pub params: Vec<TypeParameter>,
+}
+
+/// A single type parameter in a declaration.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TypeParameter {
+    pub name: String,
+    /// Bound is wrapped: `{"type": "TypeAnnotation", "typeAnnotation": <actual>}`
+    #[serde(default)]
+    pub bound: Option<TypeAnnotationWrapper>,
+    #[serde(default)]
+    pub default: Option<Box<TypeAnnotation>>,
+    #[serde(default)]
+    pub variance: Option<Variance>,
+}
+
+/// Wrapper node the Flow parser emits around type annotations in certain positions
+/// (e.g., type parameter bounds, function parameter types).
+#[derive(Debug, Clone, Deserialize)]
+pub struct TypeAnnotationWrapper {
+    #[serde(rename = "typeAnnotation")]
+    pub type_annotation: TypeAnnotation,
 }

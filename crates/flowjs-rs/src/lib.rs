@@ -35,6 +35,8 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     export_dir: PathBuf,
     array_tuple_limit: usize,
+    file_extension: String,
+    large_int_type: String,
 }
 
 impl Config {
@@ -43,6 +45,8 @@ impl Config {
         Self {
             export_dir: PathBuf::from("./bindings"),
             array_tuple_limit: 64,
+            file_extension: "js.flow".to_owned(),
+            large_int_type: "bigint".to_owned(),
         }
     }
 
@@ -51,11 +55,21 @@ impl Config {
     /// | Variable | Default |
     /// |---|---|
     /// | `FLOW_RS_EXPORT_DIR` | `./bindings` |
+    /// | `FLOW_RS_FILE_EXTENSION` | `js.flow` |
+    /// | `FLOW_RS_LARGE_INT` | `bigint` |
     pub fn from_env() -> Self {
         let mut cfg = Self::new();
 
         if let Ok(dir) = std::env::var("FLOW_RS_EXPORT_DIR") {
             cfg = cfg.with_out_dir(dir);
+        }
+
+        if let Ok(ext) = std::env::var("FLOW_RS_FILE_EXTENSION") {
+            cfg = cfg.with_file_extension(ext);
+        }
+
+        if let Ok(ty) = std::env::var("FLOW_RS_LARGE_INT") {
+            cfg = cfg.with_large_int(ty);
         }
 
         cfg
@@ -84,6 +98,45 @@ impl Config {
     /// Return the maximum size of arrays treated as tuples.
     pub fn array_tuple_limit(&self) -> usize {
         self.array_tuple_limit
+    }
+
+    /// Set the file extension for generated Flow files.
+    ///
+    /// This is determined by your project's JS module system:
+    /// - `"js.flow"` — standard
+    /// - `"cjs.flow"` — CommonJS
+    /// - `"mjs.flow"` — ES modules
+    pub fn with_file_extension(mut self, ext: impl Into<String>) -> Self {
+        self.file_extension = ext.into();
+        self
+    }
+
+    /// Return the file extension for generated files.
+    pub fn file_extension(&self) -> &str {
+        &self.file_extension
+    }
+
+    /// Set the Flow type used for large integers (`i64`, `u64`, `i128`, `u128`).
+    ///
+    /// Default: `"bigint"` (matches ts-rs)
+    pub fn with_large_int(mut self, ty: impl Into<String>) -> Self {
+        self.large_int_type = ty.into();
+        self
+    }
+
+    /// Return the Flow type for large integers.
+    pub fn large_int(&self) -> &str {
+        &self.large_int_type
+    }
+
+    /// Resolve a type's base output path (without extension) into a full path with extension.
+    pub fn resolve_output_path(&self, base: &Path) -> PathBuf {
+        if base.extension().is_some() {
+            base.to_owned()
+        } else {
+            let name = base.to_str().unwrap_or("unknown");
+            PathBuf::from(format!("{name}.{}", self.file_extension()))
+        }
     }
 }
 

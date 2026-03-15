@@ -10,31 +10,107 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
+          components: rustfmt
       - uses: taiki-e/install-action@v2
         with:
           tool: taplo-cli
+      - run: cargo fmt --all -- --check
+      - run: taplo fmt --check
 
-      - name: Format (rustfmt)
-        run: cargo fmt --all -- --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: oven-sh/setup-bun@v2
+      - run: cargo clippy --all-targets -- -D warnings
 
-      - name: Format (taplo)
-        run: taplo fmt --check
-
-      - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Test
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - name: Test workspace
         run: cargo test --workspace
+
+  test-all-features:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - name: Test with all features
+        run: cargo test --workspace --all-features
+
+  test-no-defaults:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - name: Test without default features
+        run: cargo test -p flowjs-rs --no-default-features
+
+  ast-staleness:
+    name: AST staleness check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - name: Install latest flow-parser
+        run: cd crates/flow-parser && bun install
+      - name: Run AST staleness tests
+        run: cargo test -p flowjs-parser --test ast_staleness
+
+  flow-check:
+    name: Flow type-check exported bindings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Flow bindings
+        run: |
+          mkdir -p /tmp/flow-check/bindings
+          FLOW_RS_EXPORT_DIR=/tmp/flow-check/bindings cargo test --workspace --all-features
+
+      - name: Setup Flow project
+        run: |
+          cd /tmp/flow-check
+          npm init -y
+          npm install --save-dev flow-bin
+          cat > .flowconfig << 'EOF'
+          [ignore]
+          [include]
+          [libs]
+          [options]
+          enums=true
+          exact_by_default=true
+          [strict]
+          EOF
+
+      - name: Run Flow check
+        run: cd /tmp/flow-check && npx flow check --quiet
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.78.0
+      - uses: oven-sh/setup-bun@v2
+      - name: Check MSRV builds
+        run: cargo check --workspace

@@ -1,0 +1,89 @@
+name: Update flow-parser
+
+on:
+  schedule:
+    # Weekly on Monday 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get current flow-parser version
+        id: current
+        run: |
+          cd crates/flow-parser
+          CURRENT=$(bun pm ls 2>/dev/null | grep flow-parser | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Update flow-parser to latest
+        run: |
+          cd crates/flow-parser
+          bun update flow-parser --latest
+
+      - name: Get new flow-parser version
+        id: new
+        run: |
+          cd crates/flow-parser
+          NEW=$(bun pm ls 2>/dev/null | grep flow-parser | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version changed
+        id: changed
+        run: |
+          if [ "${{ steps.current.outputs.version }}" = "${{ steps.new.outputs.version }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update vendored JS
+        if: steps.changed.outputs.skip == 'false'
+        run: |
+          cd crates/flow-parser
+          cp node_modules/flow-parser/flow_parser.js vendor/flow_parser.js
+
+      - name: Run tests
+        if: steps.changed.outputs.skip == 'false'
+        run: cargo test --workspace
+
+      - name: Run AST staleness tests
+        if: steps.changed.outputs.skip == 'false'
+        run: cargo test -p flowjs-parser --test ast_staleness
+
+      - name: Create pull request
+        if: steps.changed.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            chore(flow-parser): bump flow-parser ${{ steps.current.outputs.version }} → ${{ steps.new.outputs.version }}
+          title: "chore(flow-parser): bump flow-parser to ${{ steps.new.outputs.version }}"
+          body: |
+            Automated flow-parser update.
+
+            - **Previous**: ${{ steps.current.outputs.version }}
+            - **New**: ${{ steps.new.outputs.version }}
+
+            All tests passed:
+            - Workspace tests
+            - AST staleness tests (no new `Other` nodes)
+
+            If the AST staleness tests failed, this PR would not have been created.
+            A failed staleness test means the new parser version emits AST nodes
+            that `ast.rs` doesn't model — add the missing variant and the test will pass.
+          branch: auto/bump-flow-parser
+          labels: dependencies, automated

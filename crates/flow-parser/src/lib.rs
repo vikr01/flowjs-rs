@@ -1,7 +1,7 @@
 //! Typed Rust bindings for Facebook's Flow parser via QuickJS.
 //!
 //! ```rust
-//! use flow_parser::FlowParser;
+//! use flowjs_parser::FlowParser;
 //!
 //! let parser = FlowParser::new().unwrap();
 //!
@@ -79,7 +79,7 @@ impl FlowParser {
 
         let script = format!(
             "(function() {{\
-                var ast = exports.parse({source_json}, {{ types: true }});\
+                var ast = exports.parse({source_json}, {{ types: true, enums: true }});\
                 return JSON.stringify(ast);\
             }})()"
         );
