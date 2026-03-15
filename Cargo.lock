@@ -69,11 +69,11 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "derive-inflection"
-version = "0.1.0"
+version = "0.0.0-alpha.3"
 
 [[package]]
 name = "derive-project-config"
-version = "0.1.0"
+version = "0.0.0-alpha.3"
 dependencies = [
  "toml",
 ]
@@ -103,7 +103,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "flowjs-parser"
-version = "0.0.0-alpha.2"
+version = "0.0.0-alpha.3"
 dependencies = [
  "quick-js",
  "serde",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "flowjs-rs"
-version = "0.0.0-alpha.2"
+version = "0.0.0-alpha.3"
 dependencies = [
  "chrono",
  "flowjs-parser",
@@ -127,7 +127,7 @@ dependencies = [
 
 [[package]]
 name = "flowjs-rs-macros"
-version = "0.0.0-alpha.2"
+version = "0.0.0-alpha.3"
 dependencies = [
  "derive-inflection",
  "derive-project-config",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "serde-attr"
-version = "0.1.0"
+version = "0.0.0-alpha.3"
 dependencies = [
  "derive-inflection",
  "syn",
@@ -584,7 +584,7 @@ checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
 name = "type-export"
-version = "0.1.0"
+version = "0.0.0-alpha.3"
 dependencies = [
  "thiserror",
 ]

@@ -1,6 +1,6 @@
 [package]
 name = "flowjs-rs-macros"
-version = "0.0.0-alpha.2"
+version = "0.0.0-alpha.3"
 edition = "2021"
 rust-version = "1.78.0"
 description = "Derive macro for flowjs-rs"
@@ -21,6 +21,6 @@ no-serde-warnings = []
 proc-macro2 = "1"
 quote = "1"
 syn = {version = "2", features = ["full", "extra-traits", "parsing"]}
-derive-inflection = {version = "0.1.0", path = "../derive-inflection"}
-derive-project-config = {version = "0.1.0", path = "../derive-project-config"}
-serde-attr = {version = "0.1.0", path = "../serde-attr"}
+derive-inflection = {version = "0.0.0-alpha.3", path = "../derive-inflection"}
+derive-project-config = {version = "0.0.0-alpha.3", path = "../derive-project-config"}
+serde-attr = {version = "0.0.0-alpha.3", path = "../serde-attr"}
