@@ -297,7 +297,310 @@ fn is_enum_flag() {
 
 #[test]
 fn decl_concrete() {
+    // Arrange
     let cfg = Config::new();
+
+    // Act
     let decl = ExportTarget::decl_concrete(&cfg);
+
+    // Assert
     assert!(decl.contains("type ExportTarget"));
+}
+
+// ── Visitor coverage: exercise visit_dependencies and visit_generics ────
+
+struct DepCollector(Vec<String>);
+impl flowjs_rs::TypeVisitor for DepCollector {
+    fn visit<T: Flow + 'static + ?Sized>(&mut self) {
+        self.0.push(T::name(&Config::new()));
+    }
+}
+
+#[test]
+fn vec_visits_element_type() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <Vec<String> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "string"), "should visit String");
+}
+
+#[test]
+fn option_visits_inner_type() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <Option<i32> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "number"), "should visit i32");
+}
+
+#[test]
+fn hashmap_visits_key_and_value() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <HashMap<String, i32> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "string"), "should visit key type");
+    assert!(v.0.iter().any(|s| s == "number"), "should visit value type");
+}
+
+#[test]
+fn result_visits_ok_and_err() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <Result<String, i32> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "string"), "should visit Ok type");
+    assert!(v.0.iter().any(|s| s == "number"), "should visit Err type");
+}
+
+#[test]
+fn tuple_visits_elements() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <(String, i32, bool) as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert_eq!(v.0.len(), 3);
+}
+
+#[test]
+fn array_visits_element() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <[i32; 5] as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "number"));
+}
+
+#[test]
+fn box_visits_inner() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <Box<String> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "string"));
+}
+
+#[test]
+fn arc_visits_inner() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <std::sync::Arc<i32> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "number"));
+}
+
+#[test]
+fn range_visits_bound() {
+    // Arrange
+    let mut v = DepCollector(vec![]);
+
+    // Act
+    <std::ops::Range<i32> as Flow>::visit_generics(&mut v);
+
+    // Assert
+    assert!(v.0.iter().any(|s| s == "number"));
+}
+
+#[test]
+fn range_inline_flattened() {
+    // Arrange
+    let cfg = Config::new();
+
+    // Act
+    let flat = std::ops::Range::<i32>::inline_flattened(&cfg);
+
+    // Assert
+    assert!(flat.starts_with('('));
+}
+
+#[test]
+fn hashmap_inline_flattened() {
+    // Arrange
+    let cfg = Config::new();
+
+    // Act
+    let flat = HashMap::<String, i32>::inline_flattened(&cfg);
+
+    // Assert
+    assert!(flat.starts_with('('));
+}
+
+#[test]
+fn tuple_inline_flattened() {
+    // Arrange
+    let cfg = Config::new();
+
+    // Act
+    let flat = <(String, i32)>::inline_flattened(&cfg);
+
+    // Assert
+    assert!(flat.starts_with('('));
+}
+
+// ── Export to same file (merge) ─────────────────────────────────────────
+
+#[derive(Flow)]
+#[flow(export_to = "merged/")]
+struct MergedTypeA {
+    a: String,
+}
+
+#[derive(Flow)]
+#[flow(export_to = "merged/")]
+struct MergedTypeB {
+    b: i32,
+}
+
+#[test]
+fn export_to_same_directory() {
+    // Arrange
+    let dir = std::env::temp_dir().join(format!("flowjs_merge_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let cfg = Config::new().with_out_dir(&dir);
+
+    // Act
+    MergedTypeA::export(&cfg).unwrap();
+    MergedTypeB::export(&cfg).unwrap();
+
+    // Assert
+    assert!(dir.join("merged").join("MergedTypeA.js.flow").exists());
+    assert!(dir.join("merged").join("MergedTypeB.js.flow").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ── Duration/Range name and inline coverage ─────────────────────────────
+
+#[test]
+fn duration_inline_matches_name() {
+    // Arrange
+    let cfg = Config::new();
+
+    // Act
+    let name = std::time::Duration::name(&cfg);
+    let inline = std::time::Duration::inline(&cfg);
+
+    // Assert
+    assert_eq!(name, inline);
+}
+
+// ── Struct with export_all (recursive dependency export) ────────────────
+
+#[derive(Flow)]
+struct DepA {
+    val: String,
+}
+
+#[derive(Flow)]
+struct DepB {
+    a: DepA,
+    count: i32,
+}
+
+#[derive(Flow)]
+struct DepC {
+    b: DepB,
+    flag: bool,
+}
+
+#[test]
+fn export_all_recursive() {
+    // Arrange
+    let dir = std::env::temp_dir().join(format!("flowjs_recursive_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let cfg = Config::new().with_out_dir(&dir);
+
+    // Act
+    DepC::export_all(&cfg).unwrap();
+
+    // Assert — all three types should be exported
+    assert!(dir.join("DepA.js.flow").exists());
+    assert!(dir.join("DepB.js.flow").exists());
+    assert!(dir.join("DepC.js.flow").exists());
+
+    // Verify imports in DepC
+    let content = std::fs::read_to_string(dir.join("DepC.js.flow")).unwrap();
+    assert!(content.contains("DepB"), "DepC should import DepB");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ── FlowParser coverage: exercise type_name on all variants ─────────────
+
+#[test]
+fn parser_type_name_all_variants() {
+    // Arrange
+    let parser = flowjs_parser::FlowParser::new().unwrap();
+
+    // Act — parse Flow source that exercises many type annotation variants
+    let sources = vec![
+        "export type T = string;",
+        "export type T = number;",
+        "export type T = boolean;",
+        "export type T = void;",
+        "export type T = mixed;",
+        "export type T = null;",
+        "export type T = ?string;",
+        "export type T = {| x: number |};",
+        "export type T = string | number;",
+        "export type T = string & number;",
+        "export type T = Array<string>;",
+        "export type T = [string, number];",
+        "export type T = number[];",
+        "export type T = (x: string) => number;",
+    ];
+
+    // Assert — all parse without error
+    for src in sources {
+        parser.parse(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+}
+
+#[test]
+fn parser_error_display() {
+    // Arrange
+    let parser = flowjs_parser::FlowParser::new().unwrap();
+
+    // Act
+    let err = parser.parse("type = ;").unwrap_err();
+
+    // Assert
+    let msg = format!("{err}");
+    assert!(!msg.is_empty(), "error should have a message");
+}
+
+#[test]
+fn parser_diagnostics() {
+    // Arrange
+    let parser = flowjs_parser::FlowParser::new().unwrap();
+
+    // Act
+    let diags = parser.diagnostics("type = ;").unwrap();
+
+    // Assert
+    assert!(!diags.is_empty());
 }

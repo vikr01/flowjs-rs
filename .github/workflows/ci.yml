@@ -121,8 +121,8 @@ jobs:
         run: |
           COVERAGE=$(cargo llvm-cov --workspace --summary-only 2>&1 | grep TOTAL | awk '{print $10}' | tr -d '%')
           echo "Coverage: ${COVERAGE}%"
-          if [ $(echo "$COVERAGE < 65" | bc) -eq 1 ]; then
-            echo "Coverage ${COVERAGE}% is below 65% threshold"
+          if [ $(echo "$COVERAGE < 70" | bc) -eq 1 ]; then
+            echo "Coverage ${COVERAGE}% is below 70% threshold"
             exit 1
           fi
 
