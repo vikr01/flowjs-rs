@@ -1,0 +1,12 @@
+[package]
+name = "derive-project-config"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Read [package.metadata.*] config from Cargo.toml for derive macros"
+keywords = ["derive", "config", "metadata", "cargo"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[dependencies]
+toml = "0.8"

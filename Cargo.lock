@@ -72,6 +72,13 @@ name = "derive-inflection"
 version = "0.1.0"
 
 [[package]]
+name = "derive-project-config"
+version = "0.1.0"
+dependencies = [
+ "toml",
+]
+
+[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -123,11 +130,11 @@ name = "flowjs-rs-macros"
 version = "0.0.0-alpha.1"
 dependencies = [
  "derive-inflection",
+ "derive-project-config",
  "proc-macro2",
  "quote",
  "serde-attr",
  "syn",
- "toml",
 ]
 
 [[package]]

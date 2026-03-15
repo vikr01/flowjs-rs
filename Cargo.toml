@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/derive-inflection",
+    "crates/derive-project-config",
     "crates/serde-attr",
     "crates/type-export",
     "crates/flow-parser",
