@@ -21,6 +21,7 @@ url-impl = ["url"]
 
 [dependencies]
 flowjs-rs-macros = {version = "=0.0.0-alpha.1", path = "../flowjs-rs-macros"}
+type-export = {version = "0.1.0", path = "../type-export"}
 thiserror = "2"
 serde_json = {version = "1", optional = true}
 chrono = {version = "0.4", optional = true}

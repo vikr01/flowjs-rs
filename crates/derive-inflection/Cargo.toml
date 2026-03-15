@@ -1,0 +1,11 @@
+[package]
+name = "derive-inflection"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Case inflection for derive macros (camelCase, snake_case, PascalCase, kebab-case, etc.)"
+keywords = ["derive", "rename", "inflection", "case"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[dependencies]

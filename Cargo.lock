@@ -68,6 +68,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "derive-inflection"
+version = "0.1.0"
+
+[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -109,6 +113,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "type-export",
  "url",
  "uuid",
 ]
@@ -117,8 +122,10 @@ dependencies = [
 name = "flowjs-rs-macros"
 version = "0.0.0-alpha.1"
 dependencies = [
+ "derive-inflection",
  "proc-macro2",
  "quote",
+ "serde-attr",
  "syn",
  "toml",
 ]
@@ -408,6 +415,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-attr"
+version = "0.1.0"
+dependencies = [
+ "derive-inflection",
+ "syn",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -559,6 +574,13 @@ name = "toml_write"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
+
+[[package]]
+name = "type-export"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "unicode-ident"

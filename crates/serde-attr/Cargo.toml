@@ -1,0 +1,13 @@
+[package]
+name = "serde-attr"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Parse #[serde(...)] attributes for derive macros that need serde compatibility"
+keywords = ["serde", "derive", "attributes", "parsing"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[dependencies]
+syn = { version = "2", features = ["full", "parsing"] }
+derive-inflection = { path = "../derive-inflection" }

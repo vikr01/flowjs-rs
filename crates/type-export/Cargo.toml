@@ -1,0 +1,12 @@
+[package]
+name = "type-export"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared export infrastructure for type declaration generators (Flow, TypeScript, etc.)"
+keywords = ["export", "types", "bindings", "codegen"]
+categories = ["development-tools::build-utils"]
+
+[dependencies]
+thiserror = "2"

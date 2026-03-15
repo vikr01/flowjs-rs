@@ -139,12 +139,12 @@ impl ContainerAttr {
                     } else if meta.path.is_ident("rename_all") {
                         let value: Lit = meta.value()?.parse()?;
                         if let Lit::Str(s) = value {
-                            this.rename_all = Some(Inflection::from_str(&s.value()));
+                            this.rename_all = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                         }
                     } else if meta.path.is_ident("rename_all_fields") {
                         let value: Lit = meta.value()?.parse()?;
                         if let Lit::Str(s) = value {
-                            this.rename_all_fields = Some(Inflection::from_str(&s.value()));
+                            this.rename_all_fields = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                         }
                     } else if meta.path.is_ident("export") {
                         this.export = true;
@@ -278,14 +278,14 @@ impl ContainerAttr {
                         let value: Lit = meta.value()?.parse()?;
                         if this.rename_all.is_none() {
                             if let Lit::Str(s) = value {
-                                this.rename_all = Some(Inflection::from_str(&s.value()));
+                                this.rename_all = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                             }
                         }
                     } else if meta.path.is_ident("rename_all_fields") {
                         let value: Lit = meta.value()?.parse()?;
                         if this.rename_all_fields.is_none() {
                             if let Lit::Str(s) = value {
-                                this.rename_all_fields = Some(Inflection::from_str(&s.value()));
+                                this.rename_all_fields = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                             }
                         }
                     } else if meta.path.is_ident("tag") {
@@ -537,7 +537,7 @@ impl VariantAttr {
                     } else if meta.path.is_ident("rename_all") {
                         let value: Lit = meta.value()?.parse()?;
                         if let Lit::Str(s) = value {
-                            this.rename_all = Some(Inflection::from_str(&s.value()));
+                            this.rename_all = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                         }
                     } else if meta.path.is_ident("inline") {
                         this.inline = true;
@@ -581,7 +581,7 @@ impl VariantAttr {
                         let value: Lit = meta.value()?.parse()?;
                         if this.rename_all.is_none() {
                             if let Lit::Str(s) = value {
-                                this.rename_all = Some(Inflection::from_str(&s.value()));
+                                this.rename_all = Some(Inflection::parse(&s.value()).expect("invalid rename_all value"));
                             }
                         }
                     } else {
@@ -599,82 +599,5 @@ impl VariantAttr {
 
 // ── Inflection ──────────────────────────────────────────────────────────
 
-/// Field/variant name inflection.
-#[derive(Clone)]
-pub enum Inflection {
-    Lower,
-    Upper,
-    Camel,
-    Snake,
-    Pascal,
-    ScreamingSnake,
-    Kebab,
-    ScreamingKebab,
-}
-
-impl Inflection {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "lowercase" => Self::Lower,
-            "UPPERCASE" => Self::Upper,
-            "camelCase" => Self::Camel,
-            "snake_case" => Self::Snake,
-            "PascalCase" => Self::Pascal,
-            "SCREAMING_SNAKE_CASE" => Self::ScreamingSnake,
-            "kebab-case" => Self::Kebab,
-            "SCREAMING-KEBAB-CASE" => Self::ScreamingKebab,
-            // This panic is acceptable in a proc macro context — the error points to the attribute.
-            // A syn::Error would be better but requires threading spans through all call sites.
-            other => panic!("unknown rename_all value: \"{other}\". Expected one of: lowercase, UPPERCASE, camelCase, snake_case, PascalCase, SCREAMING_SNAKE_CASE, kebab-case, SCREAMING-KEBAB-CASE"),
-        }
-    }
-
-    pub fn apply(&self, s: &str) -> String {
-        match self {
-            Self::Lower => s.to_lowercase(),
-            Self::Upper => s.to_uppercase(),
-            Self::Snake => to_snake_case(s),
-            Self::ScreamingSnake => to_snake_case(s).to_uppercase(),
-            Self::Camel => to_camel_case(s),
-            Self::Pascal => to_pascal_case(s),
-            Self::Kebab => to_snake_case(s).replace('_', "-"),
-            Self::ScreamingKebab => to_snake_case(s).to_uppercase().replace('_', "-"),
-        }
-    }
-}
-
-fn to_snake_case(s: &str) -> String {
-    let mut result = String::new();
-    for (i, ch) in s.chars().enumerate() {
-        if ch.is_uppercase() {
-            if i > 0 {
-                result.push('_');
-            }
-            result.push(ch.to_lowercase().next().unwrap());
-        } else {
-            result.push(ch);
-        }
-    }
-    result
-}
-
-fn to_camel_case(s: &str) -> String {
-    let pascal = to_pascal_case(s);
-    let mut chars = pascal.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_lowercase().to_string() + chars.as_str(),
-    }
-}
-
-fn to_pascal_case(s: &str) -> String {
-    s.split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().to_string() + chars.as_str(),
-            }
-        })
-        .collect()
-}
+/// Re-exported from `derive-inflection` crate.
+pub use derive_inflection::Inflection;

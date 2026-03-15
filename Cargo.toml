@@ -1,5 +1,12 @@
 [workspace]
-members = ["crates/flow-parser", "crates/flowjs-rs", "crates/flowjs-rs-macros"]
+members = [
+    "crates/derive-inflection",
+    "crates/serde-attr",
+    "crates/type-export",
+    "crates/flow-parser",
+    "crates/flowjs-rs",
+    "crates/flowjs-rs-macros",
+]
 resolver = "2"
 
 [workspace.package]
