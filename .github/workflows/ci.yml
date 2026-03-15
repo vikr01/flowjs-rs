@@ -106,6 +106,26 @@ jobs:
       - name: Run Flow check
         run: cd /tmp/flow-check && npx flow check --quiet
 
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: oven-sh/setup-bun@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(cargo llvm-cov --workspace --summary-only 2>&1 | grep TOTAL | awk '{print $10}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          if [ $(echo "$COVERAGE < 65" | bc) -eq 1 ]; then
+            echo "Coverage ${COVERAGE}% is below 65% threshold"
+            exit 1
+          fi
+
   msrv:
     runs-on: ubuntu-latest
     steps:

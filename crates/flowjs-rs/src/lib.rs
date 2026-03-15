@@ -289,8 +289,9 @@ pub trait Flow {
     where
         Self: 'static,
     {
-        let relative = Self::output_path()
+        let base = Self::output_path()
             .ok_or(ExportError::CannotBeExported(std::any::type_name::<Self>()))?;
+        let relative = cfg.resolve_output_path(&base);
         let path = cfg.export_dir.join(relative);
         export::export_to::<Self>(cfg, &path)
     }
